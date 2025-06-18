@@ -1,0 +1,97 @@
+{
+  "name": "children-game-time-manager",
+  "version": "1.0.0",
+  "description": "GPT-4.1 driven children's game time management system with Adaptive Card UI",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "cross-env NODE_ENV=development electron .",
+    "dev": "rollup -c -w",
+    "build": "rollup -c",
+    "dev:smart": "concurrently --kill-others \"cross-env CONCURRENTLY_MANAGED=true npm run dev\" \"wait-on src/renderer/bundle/bundle.js && cross-env NODE_ENV=development electron .\"",
+    "debug": "concurrently \"npm run dev\" \"wait-on src/renderer/bundle/bundle.js && cross-env NODE_ENV=development ELECTRON_ENABLE_LOGGING=1 electron . --inspect=9222 --remote-debugging-port=9223\"",
+    "test": "jest",
+    "lint": "eslint src --ext .js,.svelte",
+    "lint:svelte": "svelte-check --threshold warning",
+    "lint:all": "npm run lint && npm run lint:svelte",
+    "lint:summary": "echo '🔍 Running JavaScript/Svelte ESLint...' && npm run lint --silent 2>&1 | tail -3 && echo '\\n🔍 Running Svelte-specific checks...' && npm run lint:svelte --silent 2>&1 | tail -3",
+    "config:agents": "node src/config/test-agent-config.js",
+    "test:core": "node test-core-agent.js",
+    "format": "prettier --write \"src/**/*.{js,svelte,css,html}\"",
+    "dist": "npm run build && electron-builder"
+  },
+  "keywords": [
+    "electron",
+    "children",
+    "game-management",
+    "time-control",
+    "adaptive-cards",
+    "gpt-4"
+  ],
+  "author": "Game Time Manager Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-json": "^6.1.0",
+    "@typescript-eslint/parser": "^8.33.1",
+    "chrome-remote-interface": "^0.33.3",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.6.4",
+    "eslint": "^8.50.0",
+    "eslint-plugin-svelte": "^3.9.1",
+    "jest": "^29.7.0",
+    "svelte-check": "^4.2.1",
+    "wait-on": "^8.0.3"
+  },
+  "dependencies": {
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@supabase/supabase-js": "^2.38.4",
+    "@upstash/context7-mcp": "^1.0.14",
+    "adaptivecards": "^3.0.4",
+    "adaptivecards-templating": "^2.3.1",
+    "auto-launch": "^5.0.6",
+    "bcrypt": "^5.1.1",
+    "dotenv": "^16.5.0",
+    "electron-store": "^8.1.0",
+    "katex": "^0.16.22",
+    "lodash": "^4.17.21",
+    "moment": "^2.29.4",
+    "node-cron": "^3.0.3",
+    "node-machine-id": "^1.1.12",
+    "openai": "^4.20.1",
+    "ps-list": "^8.1.1",
+    "rollup": "^2.79.1",
+    "rollup-plugin-css-only": "^4.5.2",
+    "rollup-plugin-svelte": "^7.1.6",
+    "rollup-plugin-terser": "^7.0.2",
+    "svelte": "^4.2.8",
+    "svelte-markdown": "^0.4.1",
+    "systeminformation": "^5.21.20",
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0"
+  },
+  "build": {
+    "appId": "com.gamemanager.children",
+    "productName": "Children Game Time Manager",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+# 设置默认行为，防止文件损坏
+* text=auto
+
+# 明确指定换行符
+*.js text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# 确保这些文件始终使用LF换行符
+*.sh text eol=lf
+
+# 确保批处理文件使用CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件不转换
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary 

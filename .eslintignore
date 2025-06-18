@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+out/
+
+# Bundle files
+src/renderer/bundle/
+bundle.js
+*.bundle.js
+
+# Log files
+*.log
+*.log~
+debug_*.log
+
+# Test files that should be ignored
+nul
+
+# Temporary files
+.tmp/
+temp/
+*.tmp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git files
+.git/ 
