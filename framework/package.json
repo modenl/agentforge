@@ -1,0 +1,50 @@
+{
+  "name": "screen-control-agents-framework",
+  "version": "1.0.0",
+  "description": "A powerful framework for building AI-driven desktop applications with Electron",
+  "main": "index.js",
+  "author": "Screen Control Agents Team",
+  "license": "MIT",
+  "keywords": [
+    "ai",
+    "electron",
+    "framework",
+    "desktop-app",
+    "chatgpt",
+    "adaptive-cards",
+    "plugin-system"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "dependencies": {
+    "electron": "^27.0.0",
+    "openai": "^4.0.0",
+    "electron-store": "^8.1.0",
+    "auto-launch": "^5.0.5",
+    "@supabase/supabase-js": "^2.38.0",
+    "winston": "^3.10.0",
+    "systeminformation": "^5.21.0",
+    "node-machine-id": "^1.1.12",
+    "ps-list": "^8.1.1",
+    "chrome-remote-interface": "^0.33.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.6.4",
+    "@types/node": "^20.8.0"
+  },
+  "scripts": {
+    "test": "echo \"No tests yet\"",
+    "build": "electron-builder",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/screencontrolagents/framework.git"
+  },
+  "bugs": {
+    "url": "https://github.com/screencontrolagents/framework/issues"
+  },
+  "homepage": "https://github.com/screencontrolagents/framework#readme"
+} 

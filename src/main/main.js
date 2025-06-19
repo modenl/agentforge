@@ -109,7 +109,12 @@ class GameTimeManagerApp {
 
     // Initialize Core Agent (single LLM)
     this.coreAgent = new CoreAgent();
-    const initSuccess = await this.coreAgent.initialize();
+
+    // Load business prompt
+    const businessPromptPath = path.join(__dirname, '../prompts/business-prompt.md');
+    const businessPrompt = await fs.readFile(businessPromptPath, 'utf8');
+
+    const initSuccess = await this.coreAgent.initialize([businessPrompt]);
     if (!initSuccess) {
       throw new Error('Failed to initialize Core Agent');
     }

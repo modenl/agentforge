@@ -1,3 +1,6 @@
+// Framework Core: Core Agent
+// AI-powered agent that handles user interactions and state management
+
 const { createAIClient } = require('./ai-client-factory');
 const path = require('path');
 const fs = require('fs').promises;
@@ -41,7 +44,7 @@ class CoreAgent {
   }
 
   async loadSystemPrompt(businessPrompts = []) {
-    const basePromptPath = path.join(__dirname, '../prompts/base-prompt.md');
+    const basePromptPath = path.join(__dirname, '../config/base-prompt.md');
 
     try {
       const basePrompt = await fs.readFile(basePromptPath, 'utf8');
@@ -69,7 +72,6 @@ class CoreAgent {
       // 构建包含状态的完整系统提示词
       const contextInfo = {
         current_state: this.currentState,
-        // app_data 已弃用，不再注入到系统提示词中
         current_adaptive_card: this.currentAdaptiveCard,
         timestamp: new Date().toISOString(),
         ...context
@@ -87,8 +89,8 @@ class CoreAgent {
           ...this.getCleanChatHistory(),
           { role: 'user', content: userInput }
         ],
-        temperature: 0.7,
-        max_tokens: 8192
+        temperature: this.config.temperature,
+        max_tokens: this.config.maxTokens
       };
 
       // 📝 只记录完整的LLM上下文
@@ -117,7 +119,6 @@ class CoreAgent {
       // 构建包含状态的完整系统提示词
       const contextInfo = {
         current_state: this.currentState,
-        // app_data 已弃用，不再注入到系统提示词中
         current_adaptive_card: this.currentAdaptiveCard,
         timestamp: new Date().toISOString(),
         ...context
@@ -135,8 +136,8 @@ class CoreAgent {
           ...this.getCleanChatHistory(),
           { role: 'user', content: userInput }
         ],
-        temperature: 0.7,
-        max_tokens: 8192
+        temperature: this.config.temperature,
+        max_tokens: this.config.maxTokens
       };
 
       // 📝 只记录完整的LLM上下文
@@ -163,7 +164,6 @@ class CoreAgent {
       return this.getErrorResponse(error);
     }
   }
-
 
   cleanJsonString(jsonString) {
     try {
@@ -213,230 +213,228 @@ class CoreAgent {
       return result;
     }
 
-    return null;
+    // 单卡片兼容处理
+    return {
+      global: cardData
+    };
   }
-
 
   parseResponse(aiResponse, originalInput) {
     try {
-      // 提取SYSTEMOUTPUT
+      // 提取用户可见的消息部分
+      const visibleMessage = this.extractVisibleMessage(aiResponse);
+
+      // 查找SYSTEMOUTPUT标记
       const systemOutputMatch = aiResponse.match(/<<<SYSTEMOUTPUT>>>([\s\S]*?)<<<SYSTEMOUTPUT>>>/);
 
-      if (systemOutputMatch) {
-        // 分离message部分和系统输出部分
-        const systemOutputStart = aiResponse.indexOf('<<<SYSTEMOUTPUT>>>');
-        const messageContent = aiResponse.substring(0, systemOutputStart).trim();
-
-        const rawJsonString = systemOutputMatch[1];
-        const cleanJsonString = this.cleanJsonString(rawJsonString);
-        const systemOutput = JSON.parse(cleanJsonString);
-
-        // 更新状态
-        if (systemOutput.new_state) {
-          this.mergeCurrentState(systemOutput.new_state);
-        }
-
-        // 处理 Adaptive Card 增量更新
-        if (systemOutput.adaptive_card !== undefined) {
-          this.updateAdaptiveCardState(systemOutput.adaptive_card);
-        }
-        const adaptiveCard = this.currentAdaptiveCard;
-
-        const result = {
+      if (!systemOutputMatch) {
+        console.warn('⚠️ [PARSE] 未找到SYSTEMOUTPUT标记，返回基础响应');
+        return {
           success: true,
-          adaptive_card: adaptiveCard,
-          mcp_actions: systemOutput.mcp_actions || [],
-          message: this.fixSvgEscaping(messageContent),
-          new_state: this.currentState,
-          raw_response: aiResponse
+          message: visibleMessage,
+          new_state: {},
+          adaptive_card: {},
+          mcp_actions: []
         };
-
-        return result;
-      } else {
-        // ⚠️ LLM没有输出SYSTEMOUTPUT，这违反了prompt规则
-        console.warn('⚠️ [SYSTEMOUTPUT_MISSING] LLM违反prompt规则，没有输出SYSTEMOUTPUT');
-        console.warn('📝 [RESPONSE_CONTENT]:', aiResponse.substring(0, 200) + '...');
-        console.warn('🔧 [SUGGESTION] 这会导致状态无法更新和界面无法刷新');
-
-        const result = {
-          success: true,
-          message: this.fixSvgEscaping(aiResponse),
-          new_state: this.currentState,
-          warning: 'LLM没有输出SYSTEMOUTPUT，状态未更新'
-        };
-
-        return result;
       }
+
+      const rawJson = systemOutputMatch[1];
+      const cleanJson = this.cleanJsonString(rawJson);
+
+      let systemOutput;
+      try {
+        systemOutput = JSON.parse(cleanJson);
+      } catch (parseError) {
+        console.error('❌ [PARSE] JSON解析失败:', parseError);
+        console.error('原始JSON:', rawJson);
+        return this.getErrorResponse(new Error('Invalid JSON in SYSTEMOUTPUT'));
+      }
+
+      // 更新当前状态
+      if (systemOutput.new_state && typeof systemOutput.new_state === 'object') {
+        this.mergeCurrentState(systemOutput.new_state);
+      }
+
+      // 更新Adaptive Card状态
+      if (systemOutput.adaptive_card !== undefined) {
+        this.updateAdaptiveCardState(systemOutput.adaptive_card);
+      }
+
+      const processedCard = this.adaptCompactCard(systemOutput.adaptive_card);
+
+      return {
+        success: true,
+        message: visibleMessage,
+        new_state: this.currentState,
+        adaptive_card: processedCard,
+        mcp_actions: systemOutput.mcp_actions || []
+      };
+
     } catch (error) {
-      console.error('❌ [PARSE_ERROR]:', error.message);
+      console.error('❌ [PARSE] 响应解析异常:', error);
       return this.getErrorResponse(error);
     }
   }
 
   updateChatHistory(userInput, aiResponse) {
-    // 更新raw chat history (完整记录)
-    this.rawChatHistory.push(
-      { role: 'user', content: userInput },
-      { role: 'assistant', content: aiResponse }
-    );
+    const userMessage = {
+      role: 'user',
+      content: userInput,
+      timestamp: new Date().toISOString()
+    };
 
-    // 更新visible chat history (用户可见的部分)
-    const visibleInput = this.maskSensitiveInfo(userInput);
-    const visibleResponse = this.extractVisibleMessage(aiResponse);
+    const aiMessage = {
+      role: 'assistant',
+      content: aiResponse,
+      timestamp: new Date().toISOString()
+    };
 
-    this.visibleChatHistory.push(
-      { role: 'user', content: visibleInput },
-      { role: 'assistant', content: visibleResponse }
-    );
+    // 添加到原始历史（包含SYSTEMOUTPUT）
+    this.rawChatHistory.push(userMessage, aiMessage);
 
-    // 限制历史长度
-    if (this.rawChatHistory.length > 100) {
-      this.rawChatHistory = this.rawChatHistory.slice(-80);
+    // 添加到可见历史（不包含SYSTEMOUTPUT）
+    const visibleAiMessage = {
+      ...aiMessage,
+      content: this.extractVisibleMessage(aiResponse)
+    };
+    this.visibleChatHistory.push(userMessage, visibleAiMessage);
+
+    // 限制历史记录长度
+    const maxMessages = this.config.maxHistoryMessages;
+    if (this.rawChatHistory.length > maxMessages) {
+      this.rawChatHistory = this.rawChatHistory.slice(-maxMessages);
     }
-    if (this.visibleChatHistory.length > 100) {
-      this.visibleChatHistory = this.visibleChatHistory.slice(-80);
+    if (this.visibleChatHistory.length > maxMessages) {
+      this.visibleChatHistory = this.visibleChatHistory.slice(-maxMessages);
     }
   }
 
   maskSensitiveInfo(input) {
-    // 如果当前状态是等待密码输入，则遮罩输入
-    const isPendingPassword = this.currentState.role === 'pending_action';
+    if (typeof input !== 'string') return input;
 
-    if (isPendingPassword) {
-      // 在pending_action状态下，任何看起来像密码的输入都遮罩
-      // 简单的密码格式检测：4-20字符，不包含空格
-      if (input.trim().length >= 4 && !input.includes(' ')) {
-        return '••••••';
-      }
-    }
-
-    return input;
+    // 隐藏可能的密码信息
+    return input
+      .replace(/password[=:]\s*\S+/gi, 'password=***')
+      .replace(/密码[=:]\s*\S+/gi, '密码=***')
+      .replace(/pwd[=:]\s*\S+/gi, 'pwd=***');
   }
 
   extractVisibleMessage(aiResponse) {
-    // 从AI响应中提取用户可见的消息部分
-    const systemOutputMatch = aiResponse.match(/<<<SYSTEMOUTPUT>>>\s*([\s\S]*?)\s*<<<SYSTEMOUTPUT>>>/);
+    // 移除SYSTEMOUTPUT部分，只保留用户可见内容
+    const visibleContent = aiResponse.replace(/<<<SYSTEMOUTPUT>>>[\s\S]*?<<<SYSTEMOUTPUT>>>/g, '').trim();
 
-    let message = aiResponse;
-    if (systemOutputMatch) {
-      try {
-        const systemOutput = JSON.parse(systemOutputMatch[1]);
-        message = systemOutput.message || '系统已处理您的请求';
-      } catch (error) {
-        message = '系统已处理您的请求';
-      }
-    }
+    // 修复可能的SVG转义问题
+    const fixedContent = this.fixSvgEscaping(visibleContent);
 
-    // 修复SVG属性的过度转义问题
-    message = this.fixSvgEscaping(message);
-
-    return message;
+    return fixedContent;
   }
 
   fixSvgEscaping(content) {
-    if (!content || typeof content !== 'string') {
-      return content;
-    }
-
-    // 修复SVG属性中的双重转义：\\"value\\" -> "value"
+    // 修复SVG中的转义字符
     return content
-      .replace(/\\"/g, '"')
-      .replace(/\\\\"/g, '\\"')
-      .replace(/\\\\\\\\/g, '\\\\');
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#x27;/g, '\'')
+      .replace(/&amp;/g, '&');
   }
 
   getErrorResponse(error) {
     return {
       success: false,
       error: error.message,
-      message: '抱歉，处理您的请求时出现了问题。请稍后再试。',
-      new_state: this.currentState
+      message: '系统处理时出现错误，请稍后再试。',
+      new_state: this.currentState,
+      adaptive_card: this.currentAdaptiveCard,
+      mcp_actions: []
     };
   }
 
-  // 获取状态和历史记录的方法
   getCurrentState() {
-    return this.currentState;
+    return { ...this.currentState };
   }
 
   getRawChatHistory() {
-    return this.rawChatHistory;
+    return [...this.rawChatHistory];
   }
 
   getVisibleChatHistory() {
-    return this.visibleChatHistory;
+    return [...this.visibleChatHistory];
   }
 
-  // 手动设置状态（用于系统事件）
   setState(newState) {
-    this.currentState = { ...this.currentState, ...newState };
+    this.currentState = { ...newState };
   }
 
   mergeCurrentState(deltaState) {
-    // Step 1: apply or delete keys based on delta
-    Object.entries(deltaState).forEach(([key, value]) => {
-      if (value === null || value === undefined) {
+    // 深度合并状态对象
+    for (const [key, value] of Object.entries(deltaState)) {
+      if (value === null) {
+        // 显式 null 表示删除字段
         delete this.currentState[key];
+      } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        // 嵌套对象递归合并
+        if (typeof this.currentState[key] === 'object' && this.currentState[key] !== null) {
+          this.currentState[key] = { ...this.currentState[key], ...value };
+        } else {
+          this.currentState[key] = { ...value };
+        }
       } else {
+        // 直接赋值
         this.currentState[key] = value;
       }
-    });
-
-    // Step 2: 根据业务规则清理多余字段
-    if (this.currentState.child_state !== 'game_running') {
-      delete this.currentState.game_id;
-      delete this.currentState.game_start_time;
-      delete this.currentState.process_id;
     }
   }
 
   updateAdaptiveCardState(deltaCard) {
-    if (!this.currentAdaptiveCard) {
-      this.currentAdaptiveCard = {};
+    if (deltaCard === null) {
+      this.currentAdaptiveCard = null;
+      return;
     }
 
-    // 处理增量更新
-    Object.entries(deltaCard).forEach(([key, value]) => {
-      if (value === null || value === undefined) {
-        // 删除卡片
-        delete this.currentAdaptiveCard[key];
-      } else if (typeof value === 'object' && Object.keys(value).length === 0) {
-        // 清空卡片（设为空对象表示清除内容但保留占位）
-        delete this.currentAdaptiveCard[key];
-      } else {
-        // 更新卡片内容
-        this.currentAdaptiveCard[key] = this.adaptCompactCard({ [key]: value })[key];
-      }
-    });
-
-    // 如果所有卡片都被清除，设为 null
-    if (Object.keys(this.currentAdaptiveCard).length === 0) {
+    if (typeof deltaCard === 'object' && Object.keys(deltaCard).length === 0) {
+      // 空对象表示清空
       this.currentAdaptiveCard = null;
+      return;
+    }
+
+    if (typeof deltaCard === 'object') {
+      // 更新卡片状态
+      if (this.currentAdaptiveCard === null) {
+        this.currentAdaptiveCard = {};
+      }
+
+      for (const [key, value] of Object.entries(deltaCard)) {
+        if (value === null || (typeof value === 'object' && Object.keys(value).length === 0)) {
+          // 清空该卡片
+          delete this.currentAdaptiveCard[key];
+        } else {
+          this.currentAdaptiveCard[key] = value;
+        }
+      }
+
+      // 如果所有卡片都被清空，设置为null
+      if (Object.keys(this.currentAdaptiveCard).length === 0) {
+        this.currentAdaptiveCard = null;
+      }
     }
   }
 
   getCleanChatHistory() {
-    return this.rawChatHistory.map(message => {
-      if (message.role === 'assistant') {
-        // 移除 assistant 消息中的 SYSTEMOUTPUT 部分
-        const content = message.content;
-        const systemOutputMatch = content.match(/<<<SYSTEMOUTPUT>>>([\s\S]*?)<<<SYSTEMOUTPUT>>>/);
+    // 返回用于LLM的干净历史记录
+    return this.rawChatHistory.map(msg => ({
+      role: msg.role,
+      content: msg.role === 'user' ? this.maskSensitiveInfo(msg.content) : msg.content
+    }));
+  }
 
-        if (systemOutputMatch) {
-          // 提取 message 部分（SYSTEMOUTPUT 之前的内容）
-          const systemOutputStart = content.indexOf('<<<SYSTEMOUTPUT>>>');
-          const cleanContent = content.substring(0, systemOutputStart).trim();
-          return { ...message, content: cleanContent || '系统已处理您的请求' };
-        }
-
-        return message;
-      }
-
-      // user 消息保持不变
-      return message;
-    });
+  async cleanup() {
+    // 清理资源
+    this.rawChatHistory = [];
+    this.visibleChatHistory = [];
+    this.currentState = {};
+    this.currentAdaptiveCard = null;
   }
 }
 
 module.exports = CoreAgent;
-
