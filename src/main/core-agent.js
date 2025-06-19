@@ -16,12 +16,9 @@ class CoreAgent {
     this.systemPrompt = '';
     this.rawChatHistory = [];
     this.visibleChatHistory = [];
-    this.currentState = {
-      role: 'child',
-      child_state: 'idle',
-      parent_state: null
-    };
+    this.currentVariables = null; // 初始为 null，表示没有变量数据
     this.currentAdaptiveCard = null; // 当前卡片状态
+    this.isInitialized = false; // 标记是否已初始化
   }
 
   async initialize(businessPrompts = []) {
@@ -66,20 +63,31 @@ class CoreAgent {
 
   async processInput(userInput, context = {}) {
     try {
-      // 构建包含状态的完整系统提示词
-      const contextInfo = {
-        current_state: this.currentState,
-        // app_data 已弃用，不再注入到系统提示词中
-        current_adaptive_card: this.currentAdaptiveCard,
-        timestamp: new Date().toISOString(),
-        ...context
-      };
+      let fullSystemPrompt;
+      
+      // 🚨 首次启动检测：如果没有变量数据，不注入任何信息
+      if (this.currentVariables === null) {
+        // 第一次启动，保持 "动态注入" 不替换，让 LLM 使用 prompt 定义的初始值
+        fullSystemPrompt = this.systemPrompt.replace(
+          /```json\s*\{\s*"current_variables":\s*"动态注入"[\s\S]*?\}\s*```/,
+          `\`\`\`json\n{\n  "current_variables": "动态注入",\n  "current_adaptive_card": "动态注入",\n  "timestamp": "${new Date().toISOString()}"\n}\n\`\`\``
+        );
+        console.log('🆕 [FIRST_STARTUP] 系统首次启动，未注入任何变量数据，LLM将使用prompt定义的初始值');
+      } else {
+        // 后续运行，注入真实的变量数据
+        const contextInfo = {
+          current_variables: this.currentVariables,
+          current_adaptive_card: this.currentAdaptiveCard,
+          timestamp: new Date().toISOString(),
+          ...context
+        };
 
-      // 将状态信息注入到 prompt 模板中
-      const fullSystemPrompt = this.systemPrompt.replace(
-        /```json\s*\{\s*"current_state":\s*"动态注入"[\s\S]*?\}\s*```/,
-        `\`\`\`json\n${JSON.stringify(contextInfo, null, 2)}\n\`\`\``
-      );
+        // 将变量信息注入到 prompt 模板中
+        fullSystemPrompt = this.systemPrompt.replace(
+          /```json\s*\{\s*"current_variables":\s*"动态注入"[\s\S]*?\}\s*```/,
+          `\`\`\`json\n${JSON.stringify(contextInfo, null, 2)}\n\`\`\``
+        );
+      }
 
       const requestParams = {
         messages: [
@@ -99,6 +107,11 @@ class CoreAgent {
       const response = await this.aiClient.chat.completions.create(requestParams);
       const aiResponse = response.choices[0].message.content;
 
+      // 📝 记录完整的LLM响应
+      console.log('\n🤖 [LLM_RESPONSE] 完整响应:');
+      console.log(aiResponse);
+      console.log(''); // 空行分隔
+
       // 解析响应并更新状态
       const result = this.parseResponse(aiResponse, userInput);
 
@@ -114,20 +127,31 @@ class CoreAgent {
 
   async processInputStreaming(userInput, context = {}, streamCallback) {
     try {
-      // 构建包含状态的完整系统提示词
-      const contextInfo = {
-        current_state: this.currentState,
-        // app_data 已弃用，不再注入到系统提示词中
-        current_adaptive_card: this.currentAdaptiveCard,
-        timestamp: new Date().toISOString(),
-        ...context
-      };
+      let fullSystemPrompt;
+      
+      // 🚨 首次启动检测：如果没有变量数据，不注入任何信息
+      if (this.currentVariables === null) {
+        // 第一次启动，保持 "动态注入" 不替换，让 LLM 使用 prompt 定义的初始值
+        fullSystemPrompt = this.systemPrompt.replace(
+          /```json\s*\{\s*"current_variables":\s*"动态注入"[\s\S]*?\}\s*```/,
+          `\`\`\`json\n{\n  "current_variables": "动态注入",\n  "current_adaptive_card": "动态注入",\n  "timestamp": "${new Date().toISOString()}"\n}\n\`\`\``
+        );
+        console.log('🆕 [STREAM_FIRST_STARTUP] 系统首次启动，未注入任何变量数据，LLM将使用prompt定义的初始值');
+      } else {
+        // 后续运行，注入真实的变量数据
+        const contextInfo = {
+          current_variables: this.currentVariables,
+          current_adaptive_card: this.currentAdaptiveCard,
+          timestamp: new Date().toISOString(),
+          ...context
+        };
 
-      // 将状态信息注入到 prompt 模板中
-      const fullSystemPrompt = this.systemPrompt.replace(
-        /```json\s*\{\s*"current_state":\s*"动态注入"[\s\S]*?\}\s*```/,
-        `\`\`\`json\n${JSON.stringify(contextInfo, null, 2)}\n\`\`\``
-      );
+        // 将变量信息注入到 prompt 模板中
+        fullSystemPrompt = this.systemPrompt.replace(
+          /```json\s*\{\s*"current_variables":\s*"动态注入"[\s\S]*?\}\s*```/,
+          `\`\`\`json\n${JSON.stringify(contextInfo, null, 2)}\n\`\`\``
+        );
+      }
 
       const requestParams = {
         messages: [
@@ -231,9 +255,23 @@ class CoreAgent {
         const cleanJsonString = this.cleanJsonString(rawJsonString);
         const systemOutput = JSON.parse(cleanJsonString);
 
-        // 更新状态
-        if (systemOutput.new_state) {
-          this.mergeCurrentState(systemOutput.new_state);
+        // 更新变量
+        if (systemOutput.new_variables) {
+          // 🚨 如果是首次启动，直接设置完整的初始变量
+          if (this.currentVariables === null) {
+            this.currentVariables = { ...systemOutput.new_variables };
+            console.log('🆕 [FIRST_VARIABLES_SET] 首次设置变量:', this.currentVariables);
+          } else {
+            this.mergeCurrentVariables(systemOutput.new_variables);
+          }
+        } else if (systemOutput.new_state) {
+          // 兼容旧的 new_state 字段名
+          if (this.currentVariables === null) {
+            this.currentVariables = { ...systemOutput.new_state };
+            console.log('🆕 [FIRST_VARIABLES_SET] 首次设置变量:', this.currentVariables);
+          } else {
+            this.mergeCurrentVariables(systemOutput.new_state);
+          }
         }
 
         // 处理 Adaptive Card 增量更新
@@ -247,7 +285,7 @@ class CoreAgent {
           adaptive_card: adaptiveCard,
           mcp_actions: systemOutput.mcp_actions || [],
           message: this.fixSvgEscaping(messageContent),
-          new_state: this.currentState,
+          new_state: this.currentVariables,
           raw_response: aiResponse
         };
 
@@ -261,8 +299,9 @@ class CoreAgent {
         const result = {
           success: true,
           message: this.fixSvgEscaping(aiResponse),
-          new_state: this.currentState,
-          warning: 'LLM没有输出SYSTEMOUTPUT，状态未更新'
+          new_state: this.currentVariables,
+          warning: 'LLM没有输出SYSTEMOUTPUT，变量未更新',
+          raw_response: aiResponse
         };
 
         return result;
@@ -300,7 +339,7 @@ class CoreAgent {
 
   maskSensitiveInfo(input) {
     // 如果当前状态是等待密码输入，则遮罩输入
-    const isPendingPassword = this.currentState.role === 'pending_action';
+    const isPendingPassword = this.currentVariables && this.currentVariables.state === 'pending_action';
 
     if (isPendingPassword) {
       // 在pending_action状态下，任何看起来像密码的输入都遮罩
@@ -350,13 +389,13 @@ class CoreAgent {
       success: false,
       error: error.message,
       message: '抱歉，处理您的请求时出现了问题。请稍后再试。',
-      new_state: this.currentState
+      new_state: this.currentVariables
     };
   }
 
-  // 获取状态和历史记录的方法
-  getCurrentState() {
-    return this.currentState;
+  // 获取变量和历史记录的方法
+  getCurrentVariables() {
+    return this.currentVariables;
   }
 
   getRawChatHistory() {
@@ -367,26 +406,30 @@ class CoreAgent {
     return this.visibleChatHistory;
   }
 
-  // 手动设置状态（用于系统事件）
-  setState(newState) {
-    this.currentState = { ...this.currentState, ...newState };
+  // 手动设置变量（用于系统事件）
+  setVariables(newVariables) {
+    if (this.currentVariables === null) {
+      this.currentVariables = { ...newVariables };
+    } else {
+      this.currentVariables = { ...this.currentVariables, ...newVariables };
+    }
   }
 
-  mergeCurrentState(deltaState) {
+  mergeCurrentVariables(deltaVariables) {
     // Step 1: apply or delete keys based on delta
-    Object.entries(deltaState).forEach(([key, value]) => {
+    Object.entries(deltaVariables).forEach(([key, value]) => {
       if (value === null || value === undefined) {
-        delete this.currentState[key];
+        delete this.currentVariables[key];
       } else {
-        this.currentState[key] = value;
+        this.currentVariables[key] = value;
       }
     });
 
     // Step 2: 根据业务规则清理多余字段
-    if (this.currentState.child_state !== 'game_running') {
-      delete this.currentState.game_id;
-      delete this.currentState.game_start_time;
-      delete this.currentState.process_id;
+    if (this.currentVariables.state !== 'game_running') {
+      delete this.currentVariables.game_id;
+      delete this.currentVariables.game_start_time;
+      delete this.currentVariables.game_process_id;
     }
   }
 

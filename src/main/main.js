@@ -234,6 +234,11 @@ class GameTimeManagerApp {
         console.log('🔍 [DEBUG_IPC] coreAgent.processInput 完成，耗时:', duration + 'ms');
         console.log('🔍 [DEBUG_IPC] 响应:', JSON.stringify(response, null, 2));
 
+        // 📝 记录原始响应内容
+        if (response.raw_response) {
+          console.log('📡 [IPC] raw_response:', response.raw_response);
+        }
+
         console.log('📡 [IPC] 处理完成 |', `耗时: ${duration}ms | 成功: ${response.success} | 消息: ${response.message?.length || 0}字 | 操作: ${response.mcp_actions?.length || 0}个`);
 
         // 如果有MCP操作，执行它们
@@ -243,7 +248,7 @@ class GameTimeManagerApp {
           console.log('🔍 [DEBUG_IPC] MCP 操作执行完成');
 
           // MCP 操作执行完成后，更新响应中的状态为当前实际状态
-          response.new_state = this.coreAgent.getCurrentState();
+          response.new_state = this.coreAgent.getCurrentVariables();
           console.log('🔍 [DEBUG_IPC] 同步状态完成:', response.new_state);
         }
 
@@ -279,12 +284,17 @@ class GameTimeManagerApp {
         // 输出完整的流式响应（包括 raw_response）
         console.log('🔍 [STREAM_DEBUG] 流式响应详情:', JSON.stringify(response, null, 2));
 
+        // 📝 记录流式原始响应内容
+        if (response.raw_response) {
+          console.log('🌊 [IPC] streaming raw_response:', response.raw_response);
+        }
+
         // 如果有MCP操作，执行它们
         if (response.mcp_actions && response.mcp_actions.length > 0) {
           await this.executeMCPActions(response.mcp_actions);
 
           // MCP 操作执行完成后，更新响应中的状态为当前实际状态
-          response.new_state = this.coreAgent.getCurrentState();
+          response.new_state = this.coreAgent.getCurrentVariables();
         }
 
         return response;
@@ -298,7 +308,7 @@ class GameTimeManagerApp {
     // 获取当前状态
     ipcMain.handle('core:getState', () => {
       return {
-        agent_state: this.coreAgent.getCurrentState()
+        agent_state: this.coreAgent.getCurrentVariables()
         // app_data 已废弃，system_state 已简化，主要状态由 agent_state 承载
       };
     });
@@ -406,26 +416,24 @@ class GameTimeManagerApp {
           logger.info('Game launched:', launchResult);
 
           // Update Core Agent state to reflect game is running
-          const gameStateUpdate = {
-            role: 'child',
-            child_state: 'game_running',
-            parent_state: null,
+          const gameVariablesUpdate = {
+            state: 'game_running',
             game_id: action.params.game_id,
             game_start_time: new Date().toISOString(),
-            process_id: launchResult.process_id || launchResult.processId,
+            game_process_id: launchResult.process_id || launchResult.processId,
             game_url: action.params.args && action.params.args[0] ? action.params.args[0] : undefined,
             chrome_tab_method: launchResult.method || 'unknown'
           };
 
           // Add Chrome-specific fields if applicable
           if (launchResult.tabId) {
-            gameStateUpdate.tab_id = launchResult.tabId;
+            gameVariablesUpdate.tab_id = launchResult.tabId;
           }
           if (launchResult.debugPort) {
-            gameStateUpdate.debug_port = launchResult.debugPort;
+            gameVariablesUpdate.debug_port = launchResult.debugPort;
           }
 
-          this.coreAgent.setState(gameStateUpdate);
+          this.coreAgent.setVariables(gameVariablesUpdate);
           logger.info('Core Agent state updated: game launched');
           break;
         }
@@ -437,23 +445,34 @@ class GameTimeManagerApp {
         }
 
         case 'close_game': {
-          const closeResult = await this.mcpServer.close_game(action.params, 'Agent');
+          // 确保 close_game action 包含当前状态的所有必要信息
+          const currentVariables = this.coreAgent.getCurrentVariables();
+          const enhancedParams = {
+            ...action.params,
+            // 从当前状态补充缺失的信息
+            game_id: action.params.game_id || currentVariables.game_id,
+            tab_id: action.params.tab_id || currentVariables.tab_id,
+            process_id: action.params.process_id || currentVariables.game_process_id,
+            game_url: action.params.game_url || currentVariables.game_url,
+            chrome_tab_method: action.params.chrome_tab_method || currentVariables.chrome_tab_method
+          };
+          
+          logger.info(`Executing close_game with enhanced params: ${JSON.stringify(enhancedParams)}`);
+          const closeResult = await this.mcpServer.close_game(enhancedParams, 'Agent');
           logger.info('Game closed:', closeResult);
 
           // Update Core Agent state to reflect game is no longer running
-          const currentState = this.coreAgent.getCurrentState();
-          if (currentState.child_state === 'game_running') {
+          if (currentVariables.state === 'game_running') {
             // Reset state to idle and remove game-specific fields
-            this.coreAgent.setState({
-              role: 'child',
-              child_state: 'idle',
-              parent_state: null,
+            this.coreAgent.setVariables({
+              state: 'child_idle',
               // Remove game-specific fields
               game_id: undefined,
               game_start_time: undefined,
-              process_id: undefined,
+              game_process_id: undefined,
               game_url: undefined,
-              chrome_tab_method: undefined
+              chrome_tab_method: undefined,
+              tab_id: undefined
             });
 
             logger.info('Core Agent state updated: game ended, back to idle');
@@ -469,16 +488,33 @@ class GameTimeManagerApp {
 
         case 'stop_game': {
           // stop_game action需要从当前状态获取游戏信息并关闭
-          const currentState = this.coreAgent.getCurrentState();
-          if (currentState.child_state === 'game_running' && currentState.game_id) {
+          const currentVariables = this.coreAgent.getCurrentVariables();
+          if (currentVariables.state === 'game_running' && currentVariables.game_id) {
             const closeParams = {
-              game_id: currentState.game_id,
-              process_id: currentState.process_id, // 可选，如果有的话
-              game_url: currentState.game_url, // 游戏URL，用于Chrome标签页识别
-              chrome_tab_method: currentState.chrome_tab_method // 启动方式，决定关闭策略
+              game_id: currentVariables.game_id,
+              process_id: currentVariables.game_process_id, // 可选，如果有的话
+              game_url: currentVariables.game_url, // 游戏URL，用于Chrome标签页识别
+              chrome_tab_method: currentVariables.chrome_tab_method, // 启动方式，决定关闭策略
+              tab_id: currentVariables.tab_id // 重要：传递 tab_id 用于 Chrome 标签页关闭
             };
+            
+            logger.info(`Attempting to close game with params: ${JSON.stringify(closeParams)}`);
             const closeResult = await this.mcpServer.close_game(closeParams, 'Agent');
             logger.info('Game stopped:', closeResult);
+            
+            // 更新状态：移除 tab_id 字段
+            this.coreAgent.setVariables({
+              state: 'child_idle',
+              // Remove game-specific fields
+              game_id: undefined,
+              game_start_time: undefined,
+              game_process_id: undefined,
+              game_url: undefined,
+              chrome_tab_method: undefined,
+              tab_id: undefined
+            });
+            
+            logger.info('Core Agent state updated: game ended, back to idle');
           } else {
             logger.warn('stop_game called but no game is currently running');
           }
@@ -551,7 +587,7 @@ class GameTimeManagerApp {
 
       // 发送初始化完成事件
       this.mainWindow.webContents.send('system:initialized', {
-        state: this.coreAgent.getCurrentState()
+        state: this.coreAgent.getCurrentVariables()
       });
     });
 
@@ -647,10 +683,10 @@ class GameTimeManagerApp {
 
   async updateTimeTracking() {
     try {
-      const currentState = this.coreAgent.getCurrentState();
+      const currentVariables = this.coreAgent.getCurrentVariables();
 
       // 只有在游戏运行时才进行时间跟踪
-      if (currentState.child_state === 'game_running') {
+      if (currentVariables.state === 'game_running') {
         // 让LLM处理时间跟踪逻辑，包括超时检查
         await this.coreAgent.processInput('系统执行时间跟踪检查', {
           isSystemEvent: true,

@@ -30,6 +30,9 @@ class AIClientWrapper {
 
             console.log('🤖 [CLIENT] 调用成功 |', `耗时: ${duration}ms | 完成: ${response.choices?.[0]?.finish_reason} | 内容: ${response.choices?.[0]?.message?.content?.length}字`);
 
+            // 📝 记录原始响应内容
+            console.log('🤖 [CLIENT] raw_response:', response.choices?.[0]?.message?.content);
+
             return response;
           } catch (error) {
             const duration = Date.now() - startTime;
@@ -106,6 +109,9 @@ class AIClientWrapper {
         contentLength: fullContent.length
       });
 
+      // 📝 记录流式完成的原始响应内容
+      console.log('🌊 [STREAM_CLIENT] raw_response:', fullContent);
+
       return {
         content: fullContent,
         role: 'assistant',
@@ -147,6 +153,9 @@ class AIClientWrapper {
         totalLatency,
         contentLength: response.choices[0]?.message?.content?.length || 0
       });
+
+      // 📝 记录非流式完成的原始响应内容
+      console.log('🤖 [COMPLETE_CLIENT] raw_response:', response.choices[0]?.message?.content);
 
       return {
         content: response.choices[0]?.message?.content || '',
