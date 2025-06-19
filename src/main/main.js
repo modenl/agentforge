@@ -15,6 +15,10 @@ const MCPServer = require('./mcp-server');
 const CoreAgent = require('./core-agent'); // 新的核心Agent
 const logger = require('./logger');
 
+// Import plugins
+const GameTimeManagerPlugin = require('../../plugins/game-time-manager/plugin');
+const ChessGamePlugin = require('../../plugins/chess-game/plugin');
+
 class GameTimeManagerApp {
   constructor() {
     this.mainWindow = null;
@@ -25,9 +29,14 @@ class GameTimeManagerApp {
     this.supabaseClient = null;
     this.autoLauncher = null;
 
+    // 插件系统
+    this.plugins = new Map();
+    this.currentPlugin = null;
+
     // 最小化系统状态 - 主要状态由 LLM 管理
     this.systemState = {
-      systemReady: false
+      systemReady: false,
+      pluginsLoaded: false
     };
   }
 
@@ -38,6 +47,9 @@ class GameTimeManagerApp {
 
       // Initialize data storage
       await this.initializeStorage();
+
+      // Initialize plugins
+      await this.initializePlugins();
 
       // Initialize external services
       await this.initializeServices();
@@ -85,6 +97,42 @@ class GameTimeManagerApp {
     logger.info('Storage directories initialized');
   }
 
+  async initializePlugins() {
+    try {
+      logger.info('Loading plugins...');
+
+      // Load configured plugins
+      const enabledPlugins = APP_CONFIG.plugins?.enabled || [];
+      const pluginClasses = {
+        'GameTimeManagerPlugin': GameTimeManagerPlugin,
+        'ChessGamePlugin': ChessGamePlugin
+      };
+
+      for (const pluginName of enabledPlugins) {
+        const PluginClass = pluginClasses[pluginName];
+        if (PluginClass) {
+          const plugin = new PluginClass();
+          await plugin.initialize();
+
+          this.plugins.set(pluginName, plugin);
+          logger.info(`Plugin loaded: ${pluginName}`);
+        } else {
+          logger.warn(`Plugin not found: ${pluginName}`);
+        }
+      }
+
+      // Set default plugin
+      const defaultPlugin = APP_CONFIG.plugins?.defaultPlugin || 'GameTimeManagerPlugin';
+      this.currentPlugin = this.plugins.get(defaultPlugin);
+
+      this.systemState.pluginsLoaded = true;
+      logger.info(`Plugins loaded successfully. Default plugin: ${defaultPlugin}`);
+    } catch (error) {
+      logger.error('Failed to initialize plugins:', error);
+      throw error;
+    }
+  }
+
   async initializeServices() {
     // Initialize Supabase client (optional)
     if (process.env.SUPABASE_URL &&
@@ -110,9 +158,17 @@ class GameTimeManagerApp {
     // Initialize Core Agent (single LLM)
     this.coreAgent = new CoreAgent();
 
-    // Load business prompt
-    const businessPromptPath = path.join(__dirname, '../prompts/business-prompt.md');
-    const businessPrompt = await fs.readFile(businessPromptPath, 'utf8');
+    // Load business prompt from current plugin
+    let businessPrompt = '';
+    if (this.currentPlugin && typeof this.currentPlugin.getBusinessPrompt === 'function') {
+      businessPrompt = await this.currentPlugin.getBusinessPrompt();
+      logger.info('Using business prompt from current plugin');
+    } else {
+      // Fallback to default business prompt
+      const businessPromptPath = path.join(__dirname, '../prompts/business-prompt.md');
+      businessPrompt = await fs.readFile(businessPromptPath, 'utf8');
+      logger.info('Using default business prompt');
+    }
 
     const initSuccess = await this.coreAgent.initialize([businessPrompt]);
     if (!initSuccess) {
@@ -250,6 +306,53 @@ class GameTimeManagerApp {
     // 获取可见聊天历史
     ipcMain.handle('core:getVisibleHistory', () => {
       return this.coreAgent.getVisibleChatHistory();
+    });
+
+    // 获取可用插件列表
+    ipcMain.handle('core:getPlugins', async(event) => {
+      try {
+        const pluginList = Array.from(this.plugins.entries()).map(([name, plugin]) => {
+          const config = plugin.getConfig ? plugin.getConfig() : {};
+          return {
+            id: name,
+            name: config.pluginName || name,
+            description: config.description || '',
+            version: config.version || '1.0.0',
+            isActive: this.currentPlugin === plugin
+          };
+        });
+        return pluginList;
+      } catch (error) {
+        logger.error('Failed to get plugins:', error);
+        return [];
+      }
+    });
+
+    // 切换插件
+    ipcMain.handle('core:switchPlugin', async(event, pluginId) => {
+      try {
+        const plugin = this.plugins.get(pluginId);
+        if (plugin) {
+          this.currentPlugin = plugin;
+
+          // 重新加载业务提示
+          let businessPrompt = '';
+          if (typeof plugin.getBusinessPrompt === 'function') {
+            businessPrompt = await plugin.getBusinessPrompt();
+          }
+
+          // 重新初始化CoreAgent
+          await this.coreAgent.initialize([businessPrompt]);
+
+          logger.info(`Switched to plugin: ${pluginId}`);
+          return { success: true, pluginId };
+        } else {
+          return { success: false, error: 'Plugin not found' };
+        }
+      } catch (error) {
+        logger.error('Failed to switch plugin:', error);
+        return { success: false, error: error.message };
+      }
     });
 
     // 系统事件通知

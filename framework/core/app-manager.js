@@ -85,6 +85,12 @@ class AppManager {
    * Set up auto-launch functionality
    */
   setupAutoLaunch() {
+    // Skip auto-launch setup in non-Electron environment
+    if (!this.isElectronEnvironment()) {
+      logger.info('Skipping auto-launch setup (non-Electron environment)');
+      return;
+    }
+
     this.autoLauncher = new AutoLaunch({
       name: this.config.appName || 'Framework App',
       path: app.getPath('exe')
@@ -101,8 +107,16 @@ class AppManager {
    * Initialize storage directories
    */
   async initializeStorage() {
-    const userDataPath = app.getPath('userData');
-    const dataPath = path.join(userDataPath, 'data');
+    let dataPath;
+
+    if (this.isElectronEnvironment()) {
+      const userDataPath = app.getPath('userData');
+      dataPath = path.join(userDataPath, 'data');
+    } else {
+      // Use local directory for non-Electron environment
+      dataPath = path.join(process.cwd(), 'data');
+    }
+
     const logsPath = path.join(dataPath, 'logs');
     const configPath = path.join(dataPath, 'config');
     const cachePath = path.join(dataPath, 'cache');
@@ -189,7 +203,14 @@ class AppManager {
     const businessPrompts = [];
     for (const plugin of this.plugins.values()) {
       if (typeof plugin.getBusinessPrompt === 'function') {
-        businessPrompts.push(plugin.getBusinessPrompt());
+        try {
+          const prompt = await plugin.getBusinessPrompt();
+          if (prompt) {
+            businessPrompts.push(prompt);
+          }
+        } catch (error) {
+          logger.warn(`Failed to get business prompt from ${plugin.constructor.name}:`, error);
+        }
       }
     }
 
@@ -206,6 +227,12 @@ class AppManager {
    * Set up IPC communication handlers
    */
   setupIPC() {
+    // Skip IPC setup in non-Electron environment
+    if (!this.isElectronEnvironment()) {
+      logger.info('Skipping IPC setup (non-Electron environment)');
+      return;
+    }
+
     // Main communication interface - process all user input through CoreAgent
     ipcMain.handle('core:processInput', async(event, userInput, context) => {
       logger.info(`Processing input: "${userInput.substring(0, 30)}..."`);
@@ -274,9 +301,28 @@ class AppManager {
   }
 
   /**
+   * Check if running in Electron environment
+   */
+  isElectronEnvironment() {
+    // Check if we have access to Electron APIs
+    try {
+      return !!(process.versions && process.versions.electron && require('electron'));
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
    * Create the main application window
    */
   async createMainWindow() {
+    // Skip window creation in non-Electron environment
+    if (!this.isElectronEnvironment()) {
+      logger.info('Skipping window creation (non-Electron environment)');
+      logger.info('Framework is ready for programmatic use');
+      return null;
+    }
+
     this.mainWindow = new BrowserWindow({
       width: this.config.window.defaultWidth,
       height: this.config.window.defaultHeight,

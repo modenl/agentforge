@@ -5,6 +5,7 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "cross-env NODE_ENV=development electron .",
+
     "dev": "rollup -c -w",
     "build": "rollup -c",
     "dev:smart": "concurrently --kill-others \"cross-env CONCURRENTLY_MANAGED=true npm run dev\" \"wait-on src/renderer/bundle/bundle.js && cross-env NODE_ENV=development electron .\"",
@@ -16,6 +17,7 @@
     "lint:summary": "echo '🔍 Running JavaScript/Svelte ESLint...' && npm run lint --silent 2>&1 | tail -3 && echo '\\n🔍 Running Svelte-specific checks...' && npm run lint:svelte --silent 2>&1 | tail -3",
     "config:agents": "node src/config/test-agent-config.js",
     "test:core": "node test-core-agent.js",
+
     "format": "prettier --write \"src/**/*.{js,svelte,css,html}\"",
     "dist": "npm run build && electron-builder"
   },

@@ -61,6 +61,15 @@ const APP_CONFIG = {
     }
   },
 
+  // 插件配置
+  plugins: {
+    enabled: [
+      'GameTimeManagerPlugin',  // 游戏时间管理插件
+      'ChessGamePlugin'         // 象棋游戏插件
+    ],
+    defaultPlugin: 'GameTimeManagerPlugin'
+  },
+
   // 开发配置
   development: {
     debugMode: false,

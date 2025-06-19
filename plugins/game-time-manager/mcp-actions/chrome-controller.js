@@ -1,6 +1,6 @@
 const CDP = require('chrome-remote-interface');
 const { spawn } = require('child_process');
-const logger = require('./logger');
+const logger = require('../../../src/main/logger');
 
 /**
  * 跨平台Chrome控制器
