@@ -20,7 +20,7 @@ const FRAMEWORK_CONFIG = {
   agent: {
     model: 'gpt-4.1',
     temperature: 0.7,
-    maxTokens: 8192,
+    maxTokens: 16384,
     maxHistoryMessages: 50,
     enableStream: true,
     timeout: 30000,
