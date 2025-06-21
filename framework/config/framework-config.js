@@ -16,16 +16,7 @@ const FRAMEWORK_CONFIG = {
     isDev
   },
 
-  // AI Agent configuration
-  agent: {
-    model: 'gpt-4.1',
-    temperature: 0.7,
-    maxTokens: 16384,
-    maxHistoryMessages: 50,
-    enableStream: true,
-    timeout: 30000,
-    retryAttempts: 3
-  },
+
 
   // Window configuration
   window: {
@@ -162,26 +153,8 @@ function deepMerge(target, source) {
  */
 function validateConfig(config) {
   // Basic validation
-  if (!config.agent || !config.agent.model) {
-    throw new Error('Agent model must be specified');
-  }
-
   if (!config.window || !config.window.defaultWidth || !config.window.defaultHeight) {
     throw new Error('Window dimensions must be specified');
-  }
-
-  // AI Client validation
-  const model = config.agent.model;
-  if (model.startsWith('gpt-') && !process.env.OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY environment variable is required for OpenAI models');
-  }
-
-  if (model.startsWith('gemini-') && !process.env.GOOGLE_API_KEY) {
-    throw new Error('GOOGLE_API_KEY environment variable is required for Gemini models');
-  }
-
-  if (model.startsWith('claude-') && !process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY environment variable is required for Claude models');
   }
 
   // Plugin directory validation
