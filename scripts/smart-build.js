@@ -13,10 +13,10 @@ const execAsync = promisify(exec);
  */
 class SmartBuilder {
   constructor() {
-    this.bundlePath = 'src/renderer/bundle/bundle.js';
+    this.bundlePath = 'framework/renderer/bundle/bundle.js';
     this.sourcePatterns = [
-      'src/renderer/svelte/**/*.svelte',
-      'src/renderer/svelte/**/*.js',
+      'framework/renderer/svelte/**/*.svelte',
+      'framework/renderer/svelte/**/*.js',
       'rollup.config.js',
       'package.json',
       'package-lock.json'

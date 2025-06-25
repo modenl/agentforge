@@ -8,7 +8,7 @@ import css from 'rollup-plugin-css-only';
 const production = !process.env.ROLLUP_WATCH;
 
 export default {
-  input: 'src/renderer/svelte/main.js',
+  input: 'framework/renderer/svelte/main.js',
   output: {
     // 生成外部source map以支持VS Code调试器
     sourcemap: !production,
@@ -25,7 +25,7 @@ export default {
     },
     format: 'iife',
     name: 'app',
-    file: 'src/renderer/bundle/bundle.js',
+    file: 'framework/renderer/bundle/bundle.js',
     // 开发模式下保持可读性
     compact: production,
     // 开发模式下保留更多调试信息
@@ -73,7 +73,7 @@ export default {
     !production && !process.env.CONCURRENTLY_MANAGED && serve(),
 
     // 启用智能重载 - 文件变化时自动重新构建
-    !production && livereload('src/renderer/bundle'),
+    !production && livereload('framework/renderer/bundle'),
 
     // If we're building for production (npm run build
     // instead of npm run dev), minify
@@ -84,8 +84,8 @@ export default {
     // 减少构建延迟以提高响应速度
     buildDelay: 50,
     // 包含所有源文件目录
-    include: ['src/**/*'],
-    exclude: ['node_modules/**', 'dist/**', 'src/renderer/bundle/**'],
+    include: ['framework/**/*'],
+    exclude: ['node_modules/**', 'dist/**', 'framework/renderer/bundle/**'],
     // 对Svelte文件变化更敏感
     chokidar: {
       usePolling: false,

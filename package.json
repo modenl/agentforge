@@ -2,9 +2,12 @@
   "name": "children-game-time-manager",
   "version": "1.0.0",
   "description": "GPT-4.1 driven children's game time management system with Adaptive Card UI",
-  "main": "src/main/main.js",
+  "main": "framework/launcher.js",
   "scripts": {
-    "start": "cross-env NODE_ENV=development electron .",
+    "start": "node scripts/start-app.js",
+    "debug": "node scripts/start-app.js --debug",
+    "smart": "node scripts/start-app.js --smart",
+    "smart-debug": "node scripts/start-app.js --smart --debug",
 
     "dev": "rollup -c -w",
     "build": "rollup -c",

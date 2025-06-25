@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:;">
+  <title>Loading...</title>
+
+  <!-- Preload fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- Global CSS Reset and Base Styles -->
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      overflow: hidden;
+    }
+
+    #svelte-app {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Loading screen */
+    .loading-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      transition: opacity 0.5s ease-out;
+    }
+
+    .loading-screen.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loading-icon {
+      font-size: 4em;
+      margin-bottom: 24px;
+      animation: spin 2s linear infinite;
+    }
+
+    .loading-text {
+      font-size: 1.2em;
+      margin-bottom: 16px;
+      font-weight: 500;
+    }
+
+    .loading-progress {
+      width: 200px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .loading-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #4FACFE 0%, #00F2FE 100%);
+      border-radius: 2px;
+      animation: progress 3s ease-in-out infinite;
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes progress {
+      0% {
+        width: 0%;
+      }
+
+      50% {
+        width: 100%;
+      }
+
+      100% {
+        width: 0%;
+      }
+    }
+
+    /* Error screen */
+    .error-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 9998;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .error-icon {
+      font-size: 4em;
+      margin-bottom: 24px;
+    }
+
+    .error-title {
+      font-size: 2em;
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+
+    .error-message {
+      font-size: 1.1em;
+      margin-bottom: 24px;
+      opacity: 0.9;
+      max-width: 600px;
+      line-height: 1.5;
+    }
+
+    .error-actions {
+      display: flex;
+      gap: 16px;
+    }
+
+    .error-btn {
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .error-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
+    }
+
+    /* Disable text selection in child mode for UI controls, but allow chat content selection */
+    .child-mode * {
+      user-select: none !important;
+      -webkit-user-select: none !important;
+      -moz-user-select: none !important;
+      -ms-user-select: none !important;
+    }
+
+    /* Override: Allow text selection in chat content (all modes) */
+    .message-content,
+    .message-content *,
+    .markdown-content,
+    .markdown-content *,
+    .text-content,
+    .text-content * {
+      user-select: text !important;
+      -webkit-user-select: text !important;
+      -moz-user-select: text !important;
+      -ms-user-select: text !important;
+      cursor: text !important;
+    }
+
+    /* Ensure child mode overrides work properly */
+    .child-mode .message-content,
+    .child-mode .message-content *,
+    .child-mode .markdown-content,
+    .child-mode .markdown-content *,
+    .child-mode .text-content,
+    .child-mode .text-content * {
+      user-select: text !important;
+      -webkit-user-select: text !important;
+      -moz-user-select: text !important;
+      -ms-user-select: text !important;
+      cursor: text !important;
+    }
+
+    /* Hide scrollbars */
+    ::-webkit-scrollbar {
+      width: 0px;
+      background: transparent;
+    }
+  </style>
+</head>
+
+<body>
+  <script>
+    console.log('🔧 [IMMEDIATE] HTML script executing');
+    console.log('🔧 [IMMEDIATE] Document ready state:', document.readyState);
+    console.log('🔧 [IMMEDIATE] ElectronAPI available:', !!window.electronAPI);
+    
+    // Try to log immediately if electronAPI is available
+    if (window.electronAPI && window.electronAPI.logToMain) {
+      window.electronAPI.logToMain('info', '=== INDEX-SVELTE LOADED (direct log) ===', typeof window.electronAPI, !!window.electronAPI.logToMain);
+    } else {
+      // Fallback to console
+      console.log('=== INDEX-SVELTE LOADED (fallback console) ===', typeof window.electronAPI, window.electronAPI ? !!window.electronAPI.logToMain : 'N/A');
+    }
+  </script>
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-icon">🎮</div>
+    <div class="loading-text">正在启动应用...</div>
+    <div class="loading-progress">
+      <div class="loading-progress-bar"></div>
+    </div>
+  </div>
+
+  <!-- Error Screen (initially hidden) -->
+  <div id="error-screen" class="error-screen" style="display: none;">
+    <div class="error-icon">⚠️</div>
+    <div class="error-title">应用启动失败</div>
+    <div class="error-message" id="error-message">
+      无法加载应用组件。请检查您的网络连接或重启应用。
+    </div>
+    <div class="error-actions">
+      <button class="error-btn" onclick="location.reload()">重新加载</button>
+      <button class="error-btn" onclick="showDebugInfo()">显示详情</button>
+    </div>
+  </div>
+
+  <!-- Svelte App Container -->
+  <div id="svelte-app"></div>
+
+  <!-- Load Svelte Bundle -->
+  <link rel="stylesheet" href="bundle/bundle.css">
+  <script src="bundle/bundle.js"></script>
+
+  <script>
+    // App initialization
+    let appInitialized = false;
+    let initTimeout;
+
+    // Hide loading screen when app is ready
+    function hideLoadingScreen() {
+      const loadingScreen = document.getElementById('loading-screen');
+      if (loadingScreen) {
+        loadingScreen.classList.add('fade-out');
+        setTimeout(() => {
+          loadingScreen.style.display = 'none';
+        }, 500);
+      }
+      appInitialized = true;
+    }
+
+    // Show error screen
+    function showErrorScreen(message = null) {
+      const loadingScreen = document.getElementById('loading-screen');
+      const errorScreen = document.getElementById('error-screen');
+      const errorMessage = document.getElementById('error-message');
+
+      if (loadingScreen) {
+        loadingScreen.style.display = 'none';
+      }
+
+      if (errorScreen) {
+        if (message) {
+          errorMessage.textContent = message;
+        }
+        errorScreen.style.display = 'flex';
+      }
+    }
+
+    // Show debug info
+    function showDebugInfo() {
+      const details = {
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString(),
+        url: window.location.href,
+        electronAPI: !!window.electronAPI,
+        error: window.lastError || 'Unknown error'
+      };
+
+      alert('调试信息:\n' + JSON.stringify(details, null, 2));
+    }
+
+    // Initialize app with timeout
+    initTimeout = setTimeout(() => {
+      if (!appInitialized) {
+        console.error('App initialization timeout');
+        showErrorScreen('应用启动超时。请重试或联系技术支持。');
+      }
+    }, 10000); // 10 second timeout
+
+    // Check if app loaded successfully
+    document.addEventListener('DOMContentLoaded', () => {
+      // Wait for Svelte app to initialize
+      setTimeout(() => {
+        const svelteApp = document.getElementById('svelte-app');
+        if (svelteApp && svelteApp.children.length > 0) {
+          hideLoadingScreen();
+          clearTimeout(initTimeout);
+        } else {
+          console.error('Svelte app failed to mount');
+          showErrorScreen('无法加载用户界面。请重新启动应用。');
+        }
+      }, 2000);
+    });
+
+    // Error handling
+    window.addEventListener('error', (event) => {
+      console.error('Global error:', event.error);
+      window.lastError = event.error?.message || 'Unknown error';
+
+      if (!appInitialized) {
+        showErrorScreen(`应用错误：${event.error?.message || '未知错误'}`);
+      }
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('Unhandled promise rejection:', event.reason);
+      window.lastError = event.reason?.message || 'Promise rejection';
+    });
+
+    // ElectronAPI availability check
+    if (!window.electronAPI) {
+      console.warn('ElectronAPI not available - running in web mode');
+    }
+
+    // Prevent default behaviors in production
+    document.addEventListener('keydown', (event) => {
+      // Block F12 (dev tools) in production
+      if (event.key === 'F12' && !window.electronAPI?.isDev) {
+        event.preventDefault();
+        return false;
+      }
+
+      // Block Ctrl+Shift+I (dev tools) in production
+      if (event.ctrlKey && event.shiftKey && event.key === 'I' && !window.electronAPI?.isDev) {
+        event.preventDefault();
+        return false;
+      }
+    });
+
+    // Prevent context menu in production
+    document.addEventListener('contextmenu', (event) => {
+      if (!window.electronAPI?.isDev) {
+        event.preventDefault();
+        return false;
+      }
+    });
+
+    // Auto-focus prevention in child mode
+    document.addEventListener('blur', () => {
+      if (window.electronAPI?.currentRole === 'Child') {
+        setTimeout(() => {
+          window.focus();
+        }, 100);
+      }
+    });
+
+    console.log('🎮 Framework App - Svelte版本已加载');
+  </script>
+</body>
+
+</html> 

@@ -21,12 +21,13 @@ async function setup() {
   // Check if .env already exists
   const envPath = path.join(__dirname, '..', '.env');
   if (fs.existsSync(envPath)) {
-    const overwrite = await question('.env file already exists. Overwrite? (y/N): ');
-    if (overwrite.toLowerCase() !== 'y') {
-      console.log('Setup cancelled.');
-      rl.close();
-      return;
-    }
+    console.log('❌ .env file already exists. To prevent accidental overwrites, please:');
+    console.log('1. Back up your current .env file: cp .env .env.backup');
+    console.log('2. Remove the existing .env file: rm .env');
+    console.log('3. Run this setup script again');
+    console.log('\nSetup cancelled to protect your existing configuration.');
+    rl.close();
+    return;
   }
 
   console.log('Please provide the following configuration values:\n');

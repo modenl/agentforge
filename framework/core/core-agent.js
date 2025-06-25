@@ -19,7 +19,8 @@ class CoreAgent {
     this.systemPrompt = '';
     this.rawChatHistory = [];
     this.visibleChatHistory = [];
-    this.currentState = {
+    // 使用配置中的初始变量，或默认变量
+    this.currentVariables = config.initialVariables || {
       role: 'child',
       child_state: 'idle',
       parent_state: null
@@ -69,9 +70,9 @@ class CoreAgent {
 
   async processInput(userInput, context = {}) {
     try {
-      // 构建包含状态的完整系统提示词
+      // 构建包含变量的完整系统提示词
       const contextInfo = {
-        current_state: this.currentState,
+        current_variables: this.currentVariables,
         current_adaptive_card: this.currentAdaptiveCard,
         timestamp: new Date().toISOString(),
         ...context
@@ -79,7 +80,7 @@ class CoreAgent {
 
       // 将状态信息注入到 prompt 模板中
       const fullSystemPrompt = this.systemPrompt.replace(
-        /```json\s*\{\s*"current_state":\s*"动态注入"[\s\S]*?\}\s*```/,
+        /```json\s*\{\s*"current_variables":\s*"动态注入"[\s\S]*?\}\s*```/,
         `\`\`\`json\n${JSON.stringify(contextInfo, null, 2)}\n\`\`\``
       );
 
@@ -93,13 +94,35 @@ class CoreAgent {
         max_tokens: this.config.maxTokens
       };
 
-      // 📝 只记录完整的LLM上下文
+      // 📝 记录完整的LLM上下文及请求参数
       console.log('\n🤖 [LLM_FULL_CONTEXT] 完整请求上下文:');
-      console.log(JSON.stringify(requestParams.messages, null, 2));
+      console.log('🤖 [LLM_REQUEST_PARAMS]:', {
+        model: this.config.model,
+        temperature: requestParams.temperature,
+        max_tokens: requestParams.max_tokens,
+        messages_count: requestParams.messages.length
+      });
+      console.log('🤖 [LLM_INPUT_MESSAGES]:');
+      console.log('=' .repeat(80));
+      requestParams.messages.forEach((msg, index) => {
+        console.log(`📋 Message ${index + 1} [${msg.role}]:`);
+        console.log('-'.repeat(40));
+        console.log(msg.content);
+        console.log('-'.repeat(40));
+        console.log('');
+      });
+      console.log('=' .repeat(80));
 
       // 调用LLM获取响应
       const response = await this.aiClient.chat.completions.create(requestParams);
       const aiResponse = response.choices[0].message.content;
+
+      // 📝 记录LLM响应
+      console.log('\n🤖 [LLM_RESPONSE]:');
+      console.log('=' .repeat(80));
+      console.log(aiResponse);
+      console.log('=' .repeat(80));
+      console.log(''); // 空行分隔
 
       // 解析响应并更新状态
       const result = this.parseResponse(aiResponse, userInput);
@@ -116,9 +139,9 @@ class CoreAgent {
 
   async processInputStreaming(userInput, context = {}, streamCallback) {
     try {
-      // 构建包含状态的完整系统提示词
+      // 构建包含变量的完整系统提示词
       const contextInfo = {
-        current_state: this.currentState,
+        current_variables: this.currentVariables,
         current_adaptive_card: this.currentAdaptiveCard,
         timestamp: new Date().toISOString(),
         ...context
@@ -126,7 +149,7 @@ class CoreAgent {
 
       // 将状态信息注入到 prompt 模板中
       const fullSystemPrompt = this.systemPrompt.replace(
-        /```json\s*\{\s*"current_state":\s*"动态注入"[\s\S]*?\}\s*```/,
+        /```json\s*\{\s*"current_variables":\s*"动态注入"[\s\S]*?\}\s*```/,
         `\`\`\`json\n${JSON.stringify(contextInfo, null, 2)}\n\`\`\``
       );
 
@@ -140,16 +163,33 @@ class CoreAgent {
         max_tokens: this.config.maxTokens
       };
 
-      // 📝 只记录完整的LLM上下文
+      // 📝 记录完整的LLM上下文及请求参数
       console.log('\n🌊 [STREAM_FULL_CONTEXT] 完整请求上下文:');
-      console.log(JSON.stringify(requestParams.messages, null, 2));
+      console.log('🌊 [STREAM_REQUEST_PARAMS]:', {
+        model: this.config.model,
+        temperature: requestParams.temperature,
+        max_tokens: requestParams.max_tokens,
+        messages_count: requestParams.messages.length
+      });
+      console.log('🌊 [STREAM_INPUT_MESSAGES]:');
+      console.log('=' .repeat(80));
+      requestParams.messages.forEach((msg, index) => {
+        console.log(`📋 Message ${index + 1} [${msg.role}]:`);
+        console.log('-'.repeat(40));
+        console.log(msg.content);
+        console.log('-'.repeat(40));
+        console.log('');
+      });
+      console.log('=' .repeat(80));
 
       // 使用流式完成
       const response = await this.aiClient.streamComplete(requestParams, streamCallback);
 
-      // 📝 只记录完整的LLM响应
-      console.log('\n🌊 [STREAM_RESPONSE] 完整响应:');
+      // 📝 记录完整的LLM响应
+      console.log('\n🌊 [STREAM_RESPONSE]:');
+      console.log('=' .repeat(80));
       console.log(response.content);
+      console.log('=' .repeat(80));
       console.log(''); // 空行分隔
 
       // 解析最终响应并更新状态
@@ -232,8 +272,8 @@ class CoreAgent {
         return {
           success: true,
           message: visibleMessage,
-          new_state: {},
-          adaptive_card: {},
+          new_variables: this.currentVariables,
+          adaptive_card: this.currentAdaptiveCard,
           mcp_actions: []
         };
       }
@@ -250,9 +290,9 @@ class CoreAgent {
         return this.getErrorResponse(new Error('Invalid JSON in SYSTEMOUTPUT'));
       }
 
-      // 更新当前状态
-      if (systemOutput.new_state && typeof systemOutput.new_state === 'object') {
-        this.mergeCurrentState(systemOutput.new_state);
+      // 更新当前变量
+      if (systemOutput.new_variables && typeof systemOutput.new_variables === 'object') {
+        this.mergeCurrentVariables(systemOutput.new_variables);
       }
 
       // 更新Adaptive Card状态
@@ -262,12 +302,42 @@ class CoreAgent {
 
       const processedCard = this.adaptCompactCard(systemOutput.adaptive_card);
 
+      // Validate and log mcp_actions if present
+      let mcpActions = systemOutput.mcp_actions || [];
+      if (mcpActions.length > 0) {
+        console.log('🔧 [MCP] Raw mcp_actions from LLM:', JSON.stringify(mcpActions, null, 2));
+        
+        // Validate each action
+        const validActions = [];
+        const invalidActions = [];
+        
+        mcpActions.forEach((action, index) => {
+          if (!action || typeof action !== 'object') {
+            invalidActions.push({ index, reason: 'not an object', action });
+          } else if (!action.action || typeof action.action !== 'string') {
+            invalidActions.push({ index, reason: 'missing or invalid action field', action });
+          } else {
+            validActions.push(action);
+          }
+        });
+        
+        if (invalidActions.length > 0) {
+          console.warn('⚠️ [MCP] Found invalid actions in LLM response:');
+          invalidActions.forEach(({ index, reason, action }) => {
+            console.warn(`  Action ${index}: ${reason} - ${JSON.stringify(action)}`);
+          });
+        }
+        
+        console.log(`✅ [MCP] ${validActions.length} valid actions, ${invalidActions.length} invalid actions`);
+        mcpActions = validActions;
+      }
+
       return {
         success: true,
         message: visibleMessage,
-        new_state: this.currentState,
+        new_variables: this.currentVariables,
         adaptive_card: processedCard,
-        mcp_actions: systemOutput.mcp_actions || []
+        mcp_actions: mcpActions
       };
 
     } catch (error) {
@@ -344,14 +414,14 @@ class CoreAgent {
       success: false,
       error: error.message,
       message: '系统处理时出现错误，请稍后再试。',
-      new_state: this.currentState,
+      new_variables: this.currentVariables,
       adaptive_card: this.currentAdaptiveCard,
       mcp_actions: []
     };
   }
 
-  getCurrentState() {
-    return { ...this.currentState };
+  getCurrentVariables() {
+    return { ...this.currentVariables };
   }
 
   getRawChatHistory() {
@@ -362,26 +432,26 @@ class CoreAgent {
     return [...this.visibleChatHistory];
   }
 
-  setState(newState) {
-    this.currentState = { ...newState };
+  setVariables(newVariables) {
+    this.currentVariables = { ...newVariables };
   }
 
-  mergeCurrentState(deltaState) {
-    // 深度合并状态对象
-    for (const [key, value] of Object.entries(deltaState)) {
+  mergeCurrentVariables(deltaVariables) {
+    // 深度合并变量对象
+    for (const [key, value] of Object.entries(deltaVariables)) {
       if (value === null) {
         // 显式 null 表示删除字段
-        delete this.currentState[key];
+        delete this.currentVariables[key];
       } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         // 嵌套对象递归合并
-        if (typeof this.currentState[key] === 'object' && this.currentState[key] !== null) {
-          this.currentState[key] = { ...this.currentState[key], ...value };
+        if (typeof this.currentVariables[key] === 'object' && this.currentVariables[key] !== null) {
+          this.currentVariables[key] = { ...this.currentVariables[key], ...value };
         } else {
-          this.currentState[key] = { ...value };
+          this.currentVariables[key] = { ...value };
         }
       } else {
         // 直接赋值
-        this.currentState[key] = value;
+        this.currentVariables[key] = value;
       }
     }
   }
@@ -432,7 +502,7 @@ class CoreAgent {
     // 清理资源
     this.rawChatHistory = [];
     this.visibleChatHistory = [];
-    this.currentState = {};
+    this.currentVariables = {};
     this.currentAdaptiveCard = null;
   }
 }

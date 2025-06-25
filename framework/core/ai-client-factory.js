@@ -30,8 +30,19 @@ class AIClientWrapper {
 
             console.log('🤖 [CLIENT] 调用成功 |', `耗时: ${duration}ms | 完成: ${response.choices?.[0]?.finish_reason} | 内容: ${response.choices?.[0]?.message?.content?.length}字`);
 
-            // 📝 记录原始响应内容
-            console.log('🤖 [CLIENT] raw_response:', response.choices?.[0]?.message?.content);
+            // 📝 记录原始响应内容及元数据
+            console.log('\n🤖 [CLIENT_RAW_RESPONSE]:');
+            console.log('=' .repeat(80));
+            console.log(response.choices?.[0]?.message?.content);
+            console.log('=' .repeat(80));
+            console.log('🤖 [CLIENT_METADATA]:', {
+              model: this.model,
+              finish_reason: response.choices?.[0]?.finish_reason,
+              usage: response.usage,
+              created: response.created,
+              id: response.id
+            });
+            console.log(''); // 空行分隔
 
             return response;
           } catch (error) {
@@ -109,8 +120,20 @@ class AIClientWrapper {
         contentLength: fullContent.length
       });
 
-      // 📝 记录流式完成的原始响应内容
-      console.log('🌊 [STREAM_CLIENT] raw_response:', fullContent);
+      // 📝 记录流式完成的原始响应内容及元数据
+      console.log('\n🌊 [STREAM_CLIENT_RAW_RESPONSE]:');
+      console.log('=' .repeat(80));
+      console.log(fullContent);
+      console.log('=' .repeat(80));
+      console.log('🌊 [STREAM_CLIENT_METADATA]:', {
+        model: this.model,
+        totalLatency,
+        firstTokenLatency,
+        chunkCount,
+        contentLength: fullContent.length,
+        finish_reason: 'stop'
+      });
+      console.log(''); // 空行分隔
 
       return {
         content: fullContent,
@@ -154,8 +177,20 @@ class AIClientWrapper {
         contentLength: response.choices[0]?.message?.content?.length || 0
       });
 
-      // 📝 记录非流式完成的原始响应内容
-      console.log('🤖 [COMPLETE_CLIENT] raw_response:', response.choices[0]?.message?.content);
+      // 📝 记录非流式完成的原始响应内容及元数据
+      console.log('\n🤖 [COMPLETE_CLIENT_RAW_RESPONSE]:');
+      console.log('=' .repeat(80));
+      console.log(response.choices[0]?.message?.content);
+      console.log('=' .repeat(80));
+      console.log('🤖 [COMPLETE_CLIENT_METADATA]:', {
+        model: this.model,
+        finish_reason: response.choices[0]?.finish_reason,
+        usage: response.usage,
+        created: response.created,
+        id: response.id,
+        totalLatency
+      });
+      console.log(''); // 空行分隔
 
       return {
         content: response.choices[0]?.message?.content || '',
