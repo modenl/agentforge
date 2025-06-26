@@ -46,6 +46,7 @@ if (user.role === 'admin' && time > workHours) {
 - **副作用隔离**: 将文件操作、网络请求、系统调用等副作用集中管理
 - **可测试性**: MCP函数可以独立测试和模拟
 - **权限控制**: 统一的权限管理和安全控制
+- **UI副作用**: GUI作为副作用，通过MCP动态生成和管理
 
 ```javascript
 // MCP函数示例 - 副作用被明确定义和隔离
@@ -55,6 +56,20 @@ module.exports = {
   handler: async (params) => {
     // 副作用：文件系统操作
     return await fs.writeFile(params.path, params.content);
+  }
+};
+
+// GUI作为副作用的示例
+module.exports = {
+  name: 'show_chess_board',
+  description: '显示国际象棋棋盘UI',
+  handler: async (params) => {
+    // 副作用：生成临时GUI
+    return {
+      type: 'AdaptiveCard',
+      body: [/* 棋盘UI结构 */],
+      actions: [/* 交互按钮 */]
+    };
   }
 };
 ```
@@ -75,6 +90,8 @@ module.exports = {
 - **智能交互**: 用户可以用自然语言与应用交互
 - **个性化**: LLM能够理解用户意图并提供个性化响应
 - **自适应UI**: 界面根据对话上下文动态生成
+- **即时GUI**: Just-in-Time GUI生成，按需创建，用后即销毁
+- **MCP UI扩展**: MCP服务器可以拥有独立UI，无缝集成到主对话界面
 
 #### 4. **技术栈简化**
 ```
@@ -83,6 +100,119 @@ module.exports = {
 
 AgentForge架构:
 LLM → Prompt → MCP → 系统资源
+```
+
+### 🎨 GUI革新：重新定义用户界面
+
+AgentForge 引入了两个突破性的GUI概念，彻底改变了传统的用户界面设计：
+
+#### 1. **Just-in-Time GUI (即时GUI)**
+
+**核心理念**: GUI的本质是自然语言的快捷方式
+
+```
+传统GUI: 预设计 → 静态界面 → 固定交互
+即时GUI: 需求驱动 → 动态生成 → 用后即销毁
+```
+
+**特性**:
+- **按需生成**: 只有在需要时才创建GUI组件
+- **上下文相关**: 根据当前对话状态生成最适合的界面
+- **即用即销**: 完成任务后自动销毁，不占用系统资源
+- **自然语言等价**: 每个GUI操作都有对应的自然语言表达
+
+**实际示例**:
+```
+用户: "我想看看当前的象棋局面"
+系统: 动态生成棋盘UI → 用户查看/操作 → 对话继续 → UI自动销毁
+
+用户: "帮我设置一个30分钟的游戏时间"
+系统: 生成时间设置界面 → 用户确认 → 界面消失 → 返回对话
+```
+
+#### 2. **MCP UI扩展：GUI作为副作用**
+
+**核心理念**: GUI是一种特殊的副作用，由MCP服务器管理
+
+```javascript
+// MCP服务器可以定义自己的UI组件
+module.exports = {
+  name: 'render_game_stats',
+  description: '渲染游戏统计界面',
+  handler: async (params) => {
+    return {
+      type: 'AdaptiveCard',
+      version: '1.5',
+      body: [
+        {
+          type: 'TextBlock',
+          text: '游戏统计',
+          weight: 'Bolder',
+          size: 'Medium'
+        },
+        {
+          type: 'FactSet',
+          facts: [
+            { title: '今日游戏时间', value: '45分钟' },
+            { title: '剩余时间', value: '15分钟' },
+            { title: '本周总计', value: '3小时30分钟' }
+          ]
+        }
+      ],
+      actions: [
+        {
+          type: 'Action.Submit',
+          title: '申请延时',
+          data: { action: 'request_extension' }
+        }
+      ]
+    };
+  }
+};
+```
+
+**架构优势**:
+- **模块化UI**: 每个MCP服务器管理自己的UI组件
+- **插件式扩展**: 新的MCP服务器可以带来新的UI功能
+- **统一集成**: 所有UI都集成在主对话窗口中
+- **独立开发**: UI组件可以独立开发和测试
+
+#### 3. **GUI设计新范式**
+
+**传统GUI设计**:
+```
+设计师设计 → 开发者实现 → 用户适应 → 反馈迭代
+```
+
+**AgentForge GUI设计**:
+```
+用户表达需求 → LLM理解意图 → 动态生成UI → 即时反馈
+```
+
+**关键差异**:
+- **需求驱动**: 界面由实际需求驱动，而不是预设计
+- **智能适应**: AI理解用户意图，生成最适合的界面
+- **零学习成本**: 用户无需学习复杂的界面操作
+- **无限可能**: 理论上可以生成任何形式的界面
+
+#### 4. **实现技术栈**
+
+```
+用户自然语言输入
+       ↓
+LLM理解和决策
+       ↓
+Prompt逻辑处理
+       ↓
+MCP函数调用 (包含UI生成)
+       ↓
+AdaptiveCard渲染
+       ↓
+即时GUI显示
+       ↓
+用户交互/完成任务
+       ↓
+GUI自动销毁
 ```
 
 ### 🔮 未来展望
