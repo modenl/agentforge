@@ -1,0 +1,376 @@
+# Screen Control Agents
+
+一个基于AI驱动的智能屏幕控制代理系统，采用模块化框架架构和自适应卡片UI，为用户提供智能的应用管理和交互体验。
+
+## 🌟 主要特性
+
+### 🤖 AI驱动的智能代理
+- **统一代理架构**: 单一核心代理处理所有用户交互
+- **多模型支持**: 可配置的AI模型（GPT-4、Gemini、Claude等）
+- **上下文感知**: 智能状态跟踪和上下文理解
+- **流式响应**: 实时响应生成，提供流畅的用户体验
+
+### 🎮 应用管理系统
+- **模块化应用**: 支持多个独立应用（国际象棋、游戏时间管理等）
+- **Chrome集成**: 直接浏览器控制和监控
+- **实时追踪**: 自动会话监控和时间管理
+- **灵活配置**: 可配置的规则和访问控制
+
+### 🎯 自适应UI界面
+- **动态界面**: 基于当前上下文的AI生成UI组件
+- **自适应卡片**: 使用Microsoft Adaptive Cards技术
+- **响应式设计**: 自动适应不同屏幕尺寸和用户角色
+- **实时更新**: 界面随对话状态动态变化
+
+### 🔧 MCP协议集成
+- **丰富的系统功能**: 30+系统控制功能
+- **权限管理**: 基于角色的功能访问控制
+- **Chrome DevTools协议**: 直接浏览器交互和控制
+- **系统监控**: 进程检测和系统完整性检查
+
+## 🏗️ 系统架构
+
+### 新架构概览
+
+本项目采用全新的模块化架构，分为**框架层**和**应用层**：
+
+```
+screencontrolagents/
+├── framework/              # 核心框架
+│   ├── config/            # 框架配置
+│   │   ├── base-prompt.md         # 基础提示词
+│   │   ├── framework-config.js    # 框架配置
+│   │   └── startup-config.js      # 启动配置
+│   ├── core/              # 核心组件
+│   │   ├── ai-client-factory.js   # AI客户端工厂
+│   │   ├── app-manager.js         # 应用管理器
+│   │   ├── core-agent.js          # 核心代理
+│   │   ├── logger.js              # 日志系统
+│   │   └── mcp-executor.js        # MCP执行器
+│   ├── renderer/          # 渲染层
+│   │   ├── svelte/               # Svelte组件
+│   │   │   ├── App.svelte        # 主应用组件
+│   │   │   └── components/       # UI组件
+│   │   │       ├── ChatWindow.svelte
+│   │   │       └── AdaptiveCardPanel.svelte
+│   │   ├── bundle/               # 构建产物
+│   │   ├── index.html            # 主页面
+│   │   └── preload.js            # 预加载脚本
+│   ├── launcher.js        # 框架启动器
+│   └── package.json       # 框架依赖
+├── apps/                  # 应用层
+│   ├── chess-game/        # 国际象棋应用
+│   │   ├── config.js             # 应用配置
+│   │   ├── chess-game-prompt.md  # 应用提示词
+│   │   └── mcp-actions/          # MCP动作
+│   └── game-time-manager/ # 游戏时间管理应用
+│       ├── config.js             # 应用配置
+│       ├── game-time-manager-prompt.md # 应用提示词
+│       └── mcp-actions/          # MCP动作
+├── app.config.js          # 全局应用配置
+└── scripts/               # 构建脚本
+```
+
+### 核心组件详解
+
+#### 1. 框架层 (Framework)
+
+**核心代理 (`framework/core/core-agent.js`)**
+- 统一的AI代理，处理所有用户交互
+- 多模型支持和智能路由
+- 流式响应和实时状态管理
+- 上下文注入和响应解析
+
+**应用管理器 (`framework/core/app-manager.js`)**
+- 动态应用加载和管理
+- 应用生命周期控制
+- 配置管理和依赖注入
+
+**MCP执行器 (`framework/core/mcp-executor.js`)**
+- Model Control Protocol实现
+- 系统功能调用和权限管理
+- Chrome集成和系统监控
+
+#### 2. 应用层 (Apps)
+
+**国际象棋应用 (`apps/chess-game/`)**
+- 完整的国际象棋游戏逻辑
+- AI对手和棋局分析
+- 自定义渲染和交互
+
+**游戏时间管理 (`apps/game-time-manager/`)**
+- 儿童游戏时间监控
+- Chrome浏览器控制
+- 家长模式和权限管理
+
+#### 3. 渲染系统 (`framework/renderer/`)
+
+**Svelte组件**
+- `App.svelte`: 主应用界面
+- `AdaptiveCardPanel.svelte`: 自适应卡片面板
+- `ChatWindow.svelte`: 对话窗口
+
+**构建系统**
+- Rollup构建配置
+- 自动化构建和热重载
+- 生产环境优化
+
+## 🚀 快速开始
+
+### 环境要求
+
+- Node.js 18+
+- npm 或 yarn
+- OpenAI API密钥（或其他AI提供商凭证）
+- Chrome浏览器（用于应用控制功能）
+
+### 安装步骤
+
+1. **克隆仓库**
+   ```bash
+   git clone https://github.com/modenl/screencontrolagents.git
+   cd screencontrolagents
+   ```
+
+2. **安装依赖**
+   ```bash
+   npm install
+   ```
+
+3. **环境配置**
+   创建 `.env` 文件：
+   ```env
+   # OpenAI配置
+   OPENAI_API_KEY=your_openai_api_key_here
+   
+   # Google AI配置（可选）
+   GOOGLE_API_KEY=your_google_api_key_here
+   
+   # 应用配置
+   NODE_ENV=development
+   LOG_LEVEL=info
+   ```
+
+4. **运行应用**
+   ```bash
+   # 智能开发模式（推荐）
+   npm run dev:smart
+   
+   # 简单启动
+   npm start
+   
+   # 构建Svelte组件
+   npm run build
+   
+   # 调试模式
+   npm run debug
+   ```
+
+## 📱 使用指南
+
+### 应用启动
+
+使用新的启动脚本：
+```bash
+# 启动特定应用
+node scripts/start-app.js chess-game
+node scripts/start-app.js game-time-manager
+
+# 使用默认应用启动
+npm start
+```
+
+### 应用配置
+
+每个应用都有独立的配置文件：
+
+**国际象棋应用** (`apps/chess-game/config.js`)
+```javascript
+module.exports = {
+  name: "chess-game",
+  displayName: "国际象棋",
+  description: "AI驱动的国际象棋游戏",
+  aiModel: "gpt-4o-mini",
+  // 其他配置...
+};
+```
+
+**游戏时间管理** (`apps/game-time-manager/config.js`)
+```javascript
+module.exports = {
+  name: "game-time-manager",
+  displayName: "游戏时间管理",
+  description: "儿童游戏时间智能管理系统",
+  aiModel: "gpt-4o-mini",
+  // 其他配置...
+};
+```
+
+### 对话交互
+
+启动应用后，可以通过自然语言与AI代理交互：
+
+**国际象棋应用示例**
+- "开始一局新游戏"
+- "我想下e4"
+- "分析当前局面"
+- "悔棋"
+
+**游戏时间管理示例**
+- "我想玩30分钟游戏"
+- "还剩多少时间？"
+- "切换到家长模式"
+- "设置新的时间限制"
+
+## 🛠️ 开发指南
+
+### 创建新应用
+
+1. **创建应用目录**
+   ```bash
+   mkdir apps/my-new-app
+   cd apps/my-new-app
+   ```
+
+2. **创建配置文件** (`config.js`)
+   ```javascript
+   module.exports = {
+     name: "my-new-app",
+     displayName: "我的新应用",
+     description: "应用描述",
+     aiModel: "gpt-4o-mini",
+     mcpActions: ["action1", "action2"]
+   };
+   ```
+
+3. **创建提示词文件** (`my-new-app-prompt.md`)
+   ```markdown
+   # 我的新应用提示词
+   
+   你是一个专业的应用助手...
+   ```
+
+4. **创建MCP动作** (`mcp-actions/my-action.js`)
+   ```javascript
+   module.exports = {
+     name: "my_action",
+     description: "执行特定动作",
+     handler: async (params) => {
+       // 动作逻辑
+       return { success: true };
+     }
+   };
+   ```
+
+### 可用脚本
+
+- `npm start` - 启动应用（开发模式）
+- `npm run dev` - 构建Svelte组件（监听模式）
+- `npm run dev:smart` - 智能开发模式（并发构建和启动）
+- `npm run debug` - 调试模式（启用Chrome DevTools）
+- `npm run build` - 构建生产资源
+- `npm run setup` - 项目初始化设置
+
+### 调试功能
+
+- **热重载**: 开发期间自动重新构建组件
+- **调试模式**: Chrome DevTools集成调试
+- **详细日志**: 多级别日志记录和文件输出
+- **状态检查**: 实时状态监控和调试
+
+## 🔧 配置说明
+
+### 全局配置 (`app.config.js`)
+
+```javascript
+module.exports = {
+  // 默认应用
+  defaultApp: "game-time-manager",
+  
+  // AI模型配置
+  ai: {
+    orchestrator: "gemini-2.0-flash-exp",
+    education: "gpt-4o-mini",
+    ui: "gpt-4o-mini"
+  },
+  
+  // 窗口配置
+  window: {
+    width: 1200,
+    height: 800,
+    webSecurity: false
+  }
+};
+```
+
+### 框架配置 (`framework/config/framework-config.js`)
+
+包含框架级别的配置，如日志设置、MCP服务器配置等。
+
+## 🔒 安全特性
+
+### 系统完整性
+- **进程监控**: 检测未授权软件和调试工具
+- **Chrome集成**: 安全的浏览器控制和权限管理
+- **会话管理**: 安全的角色切换和身份验证
+- **审计日志**: 完整的活动跟踪和安全分析
+
+### 访问控制
+- **基于角色的权限**: 每个角色有特定的允许功能
+- **密码保护**: 安全的家长模式访问
+- **功能限制**: MCP功能按用户角色限制
+- **状态验证**: 全面的状态转换验证
+
+## 🐛 故障排除
+
+### 常见问题
+
+**应用无法启动**
+- 检查Node.js版本（需要18+）
+- 验证所有依赖已安装：`npm install`
+- 确保AI API密钥在`.env`文件中有效
+
+**AI响应不工作**
+- 验证环境变量中的API密钥
+- 检查网络连接
+- 查看API使用限制和计费
+
+**Chrome控制问题**
+- 确保Chrome浏览器已安装且可访问
+- 检查Chrome DevTools协议端口可用性
+- 验证浏览器控制的系统权限
+
+### 日志和调试
+
+- **应用日志**: 检查控制台输出和日志文件
+- **调试模式**: 使用`npm run debug`启用Chrome DevTools
+- **详细日志**: 在环境中设置`LOG_LEVEL=debug`
+- **状态检查**: 在调试模式下使用开发工具
+
+## 🤝 贡献指南
+
+1. Fork 仓库
+2. 创建功能分支：`git checkout -b feature-name`
+3. 进行更改并适当测试
+4. 运行代码检查：`npm run lint`
+5. 提交详细描述的Pull Request
+
+## 📄 许可证
+
+本项目采用MIT许可证 - 详见LICENSE文件。
+
+## 🆘 支持
+
+如需支持和问题咨询：
+
+- 在[GitHub](https://github.com/modenl/screencontrolagents/issues)创建issue
+- 查看上述故障排除部分
+- 查阅配置文档
+
+## 🙏 致谢
+
+- OpenAI提供GPT API集成
+- Google提供Gemini API支持
+- Microsoft提供Adaptive Cards框架
+- Electron团队提供跨平台框架
+- Svelte团队提供响应式UI框架
