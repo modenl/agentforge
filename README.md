@@ -643,10 +643,10 @@ npm run debug               # 调试模式(启用Chrome DevTools)
    ```env
    # OpenAI配置
    OPENAI_API_KEY=your_openai_api_key_here
-   
+
    # Google AI配置（可选）
    GOOGLE_API_KEY=your_google_api_key_here
-   
+
    # 应用配置
    NODE_ENV=development
    LOG_LEVEL=info

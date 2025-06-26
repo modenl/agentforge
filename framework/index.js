@@ -4,9 +4,11 @@
 // Core components
 const AppManager = require('./core/app-manager');
 const CoreAgent = require('./core/core-agent');
-const MCPExecutor = require('./core/mcp-executor');
 const { createAIClient } = require('./core/ai-client-factory');
 const logger = require('./core/logger');
+
+// MCP module
+const MCP = require('./mcp');
 
 // Configuration
 const {
@@ -180,9 +182,11 @@ module.exports = {
   // Core components
   AppManager,
   CoreAgent,
-  MCPExecutor,
   createAIClient,
   logger,
+
+  // MCP components
+  MCP,
 
   // Base classes
   BasePlugin,

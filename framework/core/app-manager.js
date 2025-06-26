@@ -9,7 +9,7 @@ const AutoLaunch = require('auto-launch');
 const { createClient } = require('@supabase/supabase-js');
 
 const CoreAgent = require('./core-agent');
-const MCPExecutor = require('./mcp-executor');
+const { MCPManager } = require('../mcp');
 const logger = require('./logger');
 
 /**
@@ -37,7 +37,7 @@ class AppManager {
     this.tray = null;
     this.store = new Store();
     this.coreAgent = null;
-    this.mcpExecutor = null;
+    this.mcpManager = null;
     this.supabaseClient = null;
     this.autoLauncher = null;
     this.plugins = new Map();
@@ -62,11 +62,14 @@ class AppManager {
           // Initialize data storage
     await this.initializeStorage();
 
-    // Initialize MCP Executor first (before loading plugins)
-    await this.initializeMCPExecutor();
+    // Initialize MCP Manager first (before loading plugins)
+    await this.initializeMCPManager();
 
     // Load and initialize plugins
     await this.loadPlugins();
+
+    // Connect to external MCP servers
+    await this.connectExternalMCPServers();
 
     // Initialize remaining services (Core Agent, etc.)
     await this.initializeServices();
@@ -195,8 +198,8 @@ class AppManager {
    * Register MCP actions from a plugin
    */
   registerPluginMCPActions(pluginId, actions) {
-    if (!this.mcpExecutor) {
-      logger.warn(`Cannot register MCP actions for ${pluginId}: MCPExecutor not initialized`);
+    if (!this.mcpManager || !this.mcpManager.isReady()) {
+      logger.warn(`Cannot register MCP actions for ${pluginId}: MCP Manager not ready`);
       return;
     }
 
@@ -204,17 +207,17 @@ class AppManager {
 
     for (const [actionName, handler] of Object.entries(actions)) {
       logger.info(`Registering MCP action: ${actionName} for plugin ${pluginId}`);
-      this.mcpExecutor.registerAction(actionName, handler, pluginId);
+      this.mcpManager.registerMCPAction(actionName, handler, pluginId);
     }
     
     logger.info(`Completed registering ${Object.keys(actions).length} MCP actions for plugin ${pluginId}`);
   }
 
   /**
-   * Initialize MCP Executor
+   * Initialize MCP Manager
    * This must be done before loading plugins so that MCP actions can be registered
    */
-  async initializeMCPExecutor() {
+  async initializeMCPManager() {
     // Initialize Supabase client if configured
     if (this.config.supabase.url && this.config.supabase.anonKey) {
       try {
@@ -228,9 +231,52 @@ class AppManager {
       }
     }
 
-    // Initialize MCP Executor
-    this.mcpExecutor = new MCPExecutor(this.supabaseClient, logger);
-    logger.info('MCP Executor initialized');
+    // Initialize MCP Manager
+    this.mcpManager = new MCPManager(logger);
+    await this.mcpManager.initialize(this.supabaseClient);
+    logger.info('MCP Manager initialized');
+  }
+
+  /**
+   * Connect to external MCP servers from application configurations
+   */
+  async connectExternalMCPServers() {
+    logger.info('Registering and connecting to external MCP servers...');
+    
+    if (!this.mcpManager || !this.mcpManager.isReady()) {
+      logger.warn('MCP Manager not ready, skipping MCP server connections');
+      return;
+    }
+    
+    // Register MCP server configurations from framework config
+    if (this.config.mcpServers && Array.isArray(this.config.mcpServers)) {
+      this.mcpManager.registerServerConfigs('framework', this.config.mcpServers);
+    }
+    
+    // Register MCP server configurations from plugin configs
+    for (const plugin of this.plugins.values()) {
+      const pluginId = plugin.id || plugin.constructor.name;
+      if (plugin.config && plugin.config.mcpServers && Array.isArray(plugin.config.mcpServers)) {
+        this.mcpManager.registerServerConfigs(pluginId, plugin.config.mcpServers);
+      }
+    }
+    
+    // Connect to all registered servers
+    const connectionResult = await this.mcpManager.connectAllServers();
+    
+    if (connectionResult) {
+      const { successCount, failureCount } = connectionResult;
+      logger.info(`MCP server connections completed: ${successCount} successful, ${failureCount} failed`);
+      
+      // Log summary of connected servers
+      const connectedServers = this.mcpManager.getConnectedServersSummary();
+      if (connectedServers.length > 0) {
+        logger.info('Connected MCP servers summary:');
+        for (const server of connectedServers) {
+          logger.info(`  - ${server.name} (${server.appId}): ${server.tools} tools, ${server.resources} resources, ${server.prompts} prompts`);
+        }
+      }
+    }
   }
 
   /**
@@ -266,8 +312,8 @@ class AppManager {
       console.log(`📝 Combined prompt length: ${businessPrompts.join('\n\n').length} chars`);
     }
 
-    // Initialize core agent with combined prompts
-    const initSuccess = await this.coreAgent.initialize(businessPrompts);
+    // Initialize core agent with combined prompts and MCP manager
+    const initSuccess = await this.coreAgent.initialize(businessPrompts, this.mcpManager);
     if (!initSuccess) {
       throw new Error('Failed to initialize Core Agent');
     }
@@ -366,8 +412,13 @@ class AppManager {
   async executeMCPActions(actions) {
     const results = [];
     
+    if (!this.mcpManager || !this.mcpManager.isReady()) {
+      logger.warn('MCP Manager not ready, skipping MCP actions');
+      return results;
+    }
+
     // Debug: List all registered actions
-    const registeredActions = this.mcpExecutor.getRegisteredActions();
+    const registeredActions = this.mcpManager.mcpExecutor.getRegisteredActions();
     logger.info(`All registered MCP actions (${registeredActions.length}): ${registeredActions.join(', ')}`);
     
     // Filter out invalid actions and log details
@@ -399,7 +450,7 @@ class AppManager {
     for (const action of validActions) {
       try {
         logger.info(`Attempting to execute MCP action: ${action.action}`);
-        const result = await this.mcpExecutor.execute(action.action, action.parameters || action.params, action.role || 'Agent');
+        const result = await this.mcpManager.executeMCPAction(action.action, action.parameters || action.params, action.role || 'Agent');
         results.push({
           action: action.action,
           success: true,

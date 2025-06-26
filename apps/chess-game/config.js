@@ -53,5 +53,17 @@ module.exports = {
     aiColor: 'black',
     difficulty: 'master',
     showAnalysis: true
-  }
+  },
+
+  // External MCP Servers Configuration
+  mcpServers: [
+    {
+      name: 'everything-server',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-everything'],
+      env: {},
+      description: 'Comprehensive MCP server with various tools for testing and development',
+      transport: 'stdio'
+    }
+  ]
 }; 

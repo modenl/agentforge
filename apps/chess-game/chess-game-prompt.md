@@ -102,6 +102,45 @@ interface Variables {
 - `size`: 棋盘尺寸 "compact" 或 "minimal"（可选，默认 "compact"）
 - `showCoords`: 是否显示坐标（可选，默认 true）
 
+### 5.2 外部MCP服务器工具管理
+
+**可用动作**：
+- `mcp-tools-manager.listMCPTools`: 列出所有可用的外部MCP工具
+- `mcp-tools-manager.callMCPTool`: 调用特定的外部MCP工具
+- `mcp-tools-manager.getMCPServerInfo`: 获取MCP服务器详细信息
+- `mcp-tools-manager.testMCPConnections`: 测试MCP服务器连接状态
+
+**外部MCP工具自动发现**：
+系统会自动连接配置的外部MCP服务器，并通过标准MCP协议发现其capabilities：
+- **Tools**: 可调用的功能工具
+- **Resources**: 可访问的数据资源  
+- **Prompts**: 可使用的提示模板
+
+**自动注册的工具命名格式**：
+- 格式：`mcp_{服务器名}_{工具名}`
+- 示例：`mcp_chess-trainer_echo`、`mcp_chess-trainer_add`
+
+**使用示例**：
+```json
+"mcp_actions": [
+  {
+    "action": "mcp-tools-manager.listMCPTools",
+    "parameters": {}
+  }
+]
+```
+
+```json
+"mcp_actions": [
+  {
+    "action": "mcp_chess-trainer_echo",
+    "parameters": {
+      "message": "测试消息"
+    }
+  }
+]
+```
+
 ## 6. 国际象棋系统规范
 
 ### 6.1 FEN棋盘格式标准

@@ -28,13 +28,13 @@ class CoreAgent {
     this.currentAdaptiveCard = null; // 当前卡片状态
   }
 
-  async initialize(businessPrompts = []) {
+  async initialize(businessPrompts = [], mcpManager = null) {
     try {
       // 初始化AI客户端 - 使用配置文件中的模型
       this.aiClient = createAIClient(this.config.model);
 
-      // 加载系统提示词
-      await this.loadSystemPrompt(businessPrompts);
+      // 加载系统提示词 (包含MCP工具注入)
+              await this.loadSystemPrompt(businessPrompts, mcpManager);
 
       console.log('CoreAgent initialized successfully');
       return true;
@@ -44,7 +44,7 @@ class CoreAgent {
     }
   }
 
-  async loadSystemPrompt(businessPrompts = []) {
+  async loadSystemPrompt(businessPrompts = [], mcpManager = null) {
     const basePromptPath = path.join(__dirname, '../config/base-prompt.md');
 
     try {
@@ -56,6 +56,15 @@ class CoreAgent {
       for (const businessPrompt of businessPrompts) {
         if (businessPrompt && businessPrompt.trim()) {
           combinedPrompt += '\n\n' + businessPrompt.trim();
+        }
+      }
+
+      // 自动注入MCP工具信息
+      if (mcpManager && mcpManager.isReady()) {
+        const mcpToolsSection = mcpManager.generateMCPToolsPromptSection();
+        if (mcpToolsSection) {
+          combinedPrompt += '\n\n' + mcpToolsSection;
+          console.log('🔧 [MCP_TOOLS_INJECTED] MCP tools injected into system prompt');
         }
       }
 

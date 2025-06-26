@@ -2,6 +2,7 @@
 // Base class for executing MCP (Model Control Protocol) actions
 
 const { EventEmitter } = require('events');
+const MCPClient = require('./mcp-client');
 
 /**
  * Base MCP Executor class
@@ -14,6 +15,7 @@ class MCPExecutor extends EventEmitter {
     this.logger = logger;
     this.registeredActions = new Map();
     this.pluginActions = new Map(); // Map of plugin -> actions
+    this.mcpClients = new Map(); // Map of external MCP clients
   }
 
   /**
@@ -210,9 +212,175 @@ class MCPExecutor extends EventEmitter {
   }
 
   /**
+   * Connect to external MCP server and register tools as MCP actions
+   * @param {Object} serverConfig - MCP server configuration
+   * @returns {Promise<MCPClient>} Connected MCP client
+   */
+  async connectMCPServer(serverConfig) {
+    try {
+      this.logger.info(`Connecting to external MCP server: ${serverConfig.name}`);
+      
+      const client = new MCPClient(serverConfig, this.logger);
+      
+      // Connect and discover capabilities
+      await client.connect();
+      
+      // Register MCP tool proxy actions
+      const tools = client.getToolsForLLM();
+      for (const tool of tools) {
+        const actionName = `mcp_${serverConfig.name}_${tool.name}`;
+        const handler = async (params, role) => {
+          return await client.callTool(tool.name, params);
+        };
+        this.registerAction(actionName, handler, `mcp-server-${serverConfig.name}`);
+      }
+      
+      // Store client for management
+      this.mcpClients.set(serverConfig.name, client);
+      
+      this.logger.info(`Successfully connected and registered ${tools.length} tools from MCP server: ${serverConfig.name}`);
+      
+      return client;
+      
+    } catch (error) {
+      this.logger.error(`Failed to connect to MCP server ${serverConfig.name}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Disconnect from an external MCP server
+   * @param {string} serverName - Name of the server to disconnect
+   */
+  async disconnectMCPServer(serverName) {
+    const client = this.mcpClients.get(serverName);
+    if (client) {
+      // Unregister all actions from this server
+      this.unregisterPluginActions(`mcp-server-${serverName}`);
+      
+      // Disconnect client
+      await client.disconnect();
+      
+      // Remove from map
+      this.mcpClients.delete(serverName);
+      
+      this.logger.info(`Disconnected from MCP server: ${serverName}`);
+    }
+  }
+
+  /**
+   * Get information about connected MCP servers
+   * @returns {Array} Array of server information
+   */
+  getConnectedMCPServers() {
+    const servers = [];
+    for (const [name, client] of this.mcpClients) {
+      servers.push(client.getServerInfo());
+    }
+    return servers;
+  }
+
+  /**
+   * Call a tool on a specific MCP server
+   * @param {string} serverName - Name of the MCP server
+   * @param {string} toolName - Name of the tool
+   * @param {Object} parameters - Tool parameters
+   * @returns {Promise<any>} Tool result
+   */
+  async callMCPTool(serverName, toolName, parameters = {}) {
+    const client = this.mcpClients.get(serverName);
+    if (!client) {
+      throw new Error(`MCP server not connected: ${serverName}`);
+    }
+    
+    return await client.callTool(toolName, parameters);
+  }
+
+  /**
+   * Get all MCP tools formatted for LLM prompt injection
+   * This method returns tools in a format that can be injected into prompts
+   * so the LLM knows about available MCP tools and can call them
+   */
+  getMCPToolsForPrompt() {
+    const allTools = [];
+    
+    for (const [serverName, client] of this.mcpClients) {
+      if (!client.connected || !client.initialized) continue;
+      
+      const tools = client.getToolsForLLM();
+      for (const tool of tools) {
+        allTools.push({
+          name: `mcp_${serverName}_${tool.name}`,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          server: serverName,
+          originalName: tool.name
+        });
+      }
+    }
+    
+    return allTools;
+  }
+
+  /**
+   * Generate MCP tools section for prompt injection
+   * Returns a formatted string that can be injected into prompts
+   */
+  generateMCPToolsPromptSection() {
+    const tools = this.getMCPToolsForPrompt();
+    
+    if (tools.length === 0) {
+      return '';
+    }
+    
+    let section = '\n## 🔧 Available MCP Tools\n\n';
+    section += 'The following external tools are available through the Model Context Protocol:\n\n';
+    
+    for (const tool of tools) {
+      section += `### ${tool.name}\n`;
+      section += `**Description**: ${tool.description}\n`;
+      section += `**Server**: ${tool.server}\n`;
+      section += `**Usage**: Call this tool using the MCP action format\n`;
+      
+      if (tool.inputSchema && tool.inputSchema.properties) {
+        section += `**Parameters**:\n`;
+        for (const [paramName, paramDef] of Object.entries(tool.inputSchema.properties)) {
+          section += `- \`${paramName}\`: ${paramDef.description || paramDef.type || 'parameter'}\n`;
+        }
+      }
+      section += '\n';
+    }
+    
+    section += '**How to use MCP tools**:\n';
+    section += '```json\n';
+    section += '"mcp_actions": [\n';
+    section += '  {\n';
+    section += '    "action": "mcp_servername_toolname",\n';
+    section += '    "parameters": {\n';
+    section += '      "param1": "value1",\n';
+    section += '      "param2": "value2"\n';
+    section += '    }\n';
+    section += '  }\n';
+    section += ']\n';
+    section += '```\n\n';
+    
+    return section;
+  }
+
+  /**
    * Cleanup resources
    */
   async cleanup() {
+    // Disconnect all MCP clients
+    for (const [serverName, client] of this.mcpClients) {
+      try {
+        await client.cleanup();
+      } catch (error) {
+        this.logger.error(`Error cleaning up MCP client ${serverName}:`, error);
+      }
+    }
+    this.mcpClients.clear();
+    
     this.registeredActions.clear();
     this.pluginActions.clear();
     this.removeAllListeners();
