@@ -1,403 +1,374 @@
 # Screen Control Agents
 
-A comprehensive AI-driven children's game time management system with Adaptive
-Card UI and LLM-based state management, designed to help parents manage their
-children's gaming time through intelligent conversation interfaces.
+一个基于AI驱动的智能屏幕控制代理系统，采用模块化框架架构和自适应卡片UI，为用户提供智能的应用管理和交互体验。
 
-## Features
+## 🌟 主要特性
 
-### 🤖 AI-Powered State Management
+### 🤖 AI驱动的智能代理
+- **统一代理架构**: 单一核心代理处理所有用户交互
+- **多模型支持**: 可配置的AI模型（GPT-4、Gemini、Claude等）
+- **上下文感知**: 智能状态跟踪和上下文理解
+- **流式响应**: 实时响应生成，提供流畅的用户体验
 
-- **CoreAgent Architecture**: Single unified agent handling all user
-  interactions
-- **Multi-Model Support**: Configurable AI models (GPT-4, Gemini, Claude, etc.)
-- **Context-Aware Responses**: Intelligent state tracking without persistent app
-  data
-- **Streaming Interface**: Real-time response generation with smooth user
-  experience
+### 🎮 应用管理系统
+- **模块化应用**: 支持多个独立应用（国际象棋、游戏时间管理等）
+- **Chrome集成**: 直接浏览器控制和监控
+- **实时追踪**: 自动会话监控和时间管理
+- **灵活配置**: 可配置的规则和访问控制
 
-### 🎮 Game Time Management
+### 🎯 自适应UI界面
+- **动态界面**: 基于当前上下文的AI生成UI组件
+- **自适应卡片**: 使用Microsoft Adaptive Cards技术
+- **响应式设计**: 自动适应不同屏幕尺寸和用户角色
+- **实时更新**: 界面随对话状态动态变化
 
-- **Chrome Integration**: Direct browser control and monitoring
-- **Real-time Tracking**: Automatic session monitoring and time enforcement
-- **Flexible Rules**: Configurable time limits and access controls
-- **Session Management**: Intelligent session handling with idle detection
+### 🔧 MCP协议集成
+- **丰富的系统功能**: 30+系统控制功能
+- **权限管理**: 基于角色的功能访问控制
+- **Chrome DevTools协议**: 直接浏览器交互和控制
+- **系统监控**: 进程检测和系统完整性检查
 
-### 👥 Multi-Role System
+## 🏗️ 系统架构
 
-- **Child Mode**: Simplified, safe interface with large buttons and clear
-  messaging
-- **Parent Mode**: Administrative controls and detailed system management
-- **Dynamic Role Switching**: Secure authentication-based role transitions
+### 新架构概览
 
-### 🎯 Adaptive Card UI
+本项目采用全新的模块化架构，分为**框架层**和**应用层**：
 
-- **Dynamic Interface**: AI-generated UI components based on current context
-- **Dual-Panel System**: Global cards and input assist cards for optimal UX
-- **Custom Components**: Specialized elements like timers, progress bars, and
-  game icons
-- **Responsive Design**: Automatic adaptation to different screen sizes and user
-  roles
+```
+screencontrolagents/
+├── framework/              # 核心框架
+│   ├── config/            # 框架配置
+│   │   ├── base-prompt.md         # 基础提示词
+│   │   ├── framework-config.js    # 框架配置
+│   │   └── startup-config.js      # 启动配置
+│   ├── core/              # 核心组件
+│   │   ├── ai-client-factory.js   # AI客户端工厂
+│   │   ├── app-manager.js         # 应用管理器
+│   │   ├── core-agent.js          # 核心代理
+│   │   ├── logger.js              # 日志系统
+│   │   └── mcp-executor.js        # MCP执行器
+│   ├── renderer/          # 渲染层
+│   │   ├── svelte/               # Svelte组件
+│   │   │   ├── App.svelte        # 主应用组件
+│   │   │   └── components/       # UI组件
+│   │   ├── bundle/               # 构建产物
+│   │   ├── index.html            # 主页面
+│   │   └── preload.js            # 预加载脚本
+│   ├── launcher.js        # 框架启动器
+│   └── package.json       # 框架依赖
+├── apps/                  # 应用层
+│   ├── chess-game/        # 国际象棋应用
+│   │   ├── config.js             # 应用配置
+│   │   ├── chess-game-prompt.md  # 应用提示词
+│   │   └── mcp-actions/          # MCP动作
+│   └── game-time-manager/ # 游戏时间管理应用
+│       ├── config.js             # 应用配置
+│       ├── game-time-manager-prompt.md # 应用提示词
+│       └── mcp-actions/          # MCP动作
+├── app.config.js          # 全局应用配置
+└── scripts/               # 构建脚本
+```
 
-### 🔧 MCP Integration
+### 核心组件详解
 
-- **30+ System Functions**: Comprehensive system control capabilities
-- **Permission-Based Access**: Role-specific function availability
-- **Chrome DevTools Protocol**: Direct browser interaction and control
-- **System Monitoring**: Process detection and system integrity checks
+#### 1. 框架层 (Framework)
 
-### 📊 Advanced Logging & Monitoring
+**核心代理 (`framework/core/core-agent.js`)**
+- 统一的AI代理，处理所有用户交互
+- 多模型支持和智能路由
+- 流式响应和实时状态管理
+- 上下文注入和响应解析
 
-- **Comprehensive Logging**: Multi-level logging with file rotation
-- **Performance Monitoring**: System performance tracking and optimization
-- **Security Auditing**: Complete activity logging for security analysis
-- **Debug Support**: Development-friendly debugging and troubleshooting
+**应用管理器 (`framework/core/app-manager.js`)**
+- 动态应用加载和管理
+- 应用生命周期控制
+- 配置管理和依赖注入
 
-## Architecture
+**MCP执行器 (`framework/core/mcp-executor.js`)**
+- Model Control Protocol实现
+- 系统功能调用和权限管理
+- Chrome集成和系统监控
 
-### Core Components
+#### 2. 应用层 (Apps)
 
-#### 1. CoreAgent (`src/main/core-agent.js`)
+**国际象棋应用 (`apps/chess-game/`)**
+- 完整的国际象棋游戏逻辑
+- AI对手和棋局分析
+- 自定义渲染和交互
 
-The heart of the system - a unified AI agent that:
+**游戏时间管理 (`apps/game-time-manager/`)**
+- 儿童游戏时间监控
+- Chrome浏览器控制
+- 家长模式和权限管理
 
-- **State Management**: Tracks current role, child state, and parent state
-  without persistent data
-- **Multi-Model Support**: Configurable AI model integration through factory
-  pattern
-- **Streaming Support**: Real-time response generation with callback support
-- **Context Injection**: Dynamic prompt enhancement with current system state
-- **Response Parsing**: Intelligent parsing of AI responses into structured data
+#### 3. 渲染系统 (`framework/renderer/`)
 
-#### 2. MCP Server (`src/main/mcp-server.js`)
+**Svelte组件**
+- `App.svelte`: 主应用界面
+- `AdaptiveCardPanel.svelte`: 自适应卡片面板
+- `ChatWindow.svelte`: 对话窗口
 
-Model Control Protocol implementation providing:
+**构建系统**
+- Rollup构建配置
+- 自动化构建和热重载
+- 生产环境优化
 
-- **System Functions**: 30+ operations including Chrome control, time
-  management, security
-- **Permission System**: Role-based access control for all operations
-- **Chrome Integration**: Direct browser control via Chrome DevTools Protocol
-- **Security Functions**: Process monitoring, system integrity checks
-- **Data Management**: Session tracking and system state persistence
+## 🚀 快速开始
 
-#### 3. Adaptive Card Components (`src/renderer/svelte/components/`)
-
-- **AdaptiveCardPanel.svelte**: Renders Microsoft Adaptive Cards with custom
-  elements
-- **ChatWindow.svelte**: Main conversation interface with streaming support
-- **Custom Elements**: Timer, ProgressBar, GameIcon, and other specialized
-  components
-- **Event Handling**: Seamless integration between UI interactions and system
-  logic
-
-#### 4. Chrome Controller (`src/main/chrome-controller.js`)
-
-Direct browser integration featuring:
-
-- **DevTools Protocol**: Low-level Chrome control and monitoring
-- **Tab Management**: Create, close, and monitor browser tabs
-- **URL Control**: Navigate to specific websites and enforce restrictions
-- **Session Monitoring**: Track active gaming sessions and enforce time limits
-
-#### 5. AI Client Factory (`src/main/ai-client-factory.js`)
-
-Flexible AI model integration:
-
-- **Multi-Provider Support**: OpenAI, Google, Anthropic, and other providers
-- **Streaming Support**: Real-time response generation across all models
-- **Configuration Management**: Model-specific settings and optimization
-- **Error Handling**: Robust error handling and fallback mechanisms
-
-### Configuration System (`src/config/config.js`)
-
-Centralized configuration covering:
-
-- **Application Settings**: Basic app configuration and paths
-- **UI Configuration**: Window settings and Adaptive Card parameters
-- **Logging Configuration**: Multi-level logging with file rotation
-- **AI Agent Settings**: Model selection, temperature, token limits
-- **Development Options**: Debug mode, mock data, and development tools
-
-### Prompt System (`src/prompts/`)
-
-Sophisticated prompt engineering:
-
-- **base-prompt.md**: Core system instructions and response format
-  specifications
-- **business-prompt.md**: Detailed business logic and state transition rules
-- **core-agent-prompt.md**: Complete agent behavior and decision-making
-  framework
-- **Dynamic Injection**: Runtime context injection for state-aware responses
-
-## Installation
-
-### Prerequisites
+### 环境要求
 
 - Node.js 18+
-- npm or yarn
-- OpenAI API key (or other AI provider credentials)
-- Chrome browser (for game control features)
+- npm 或 yarn
+- OpenAI API密钥（或其他AI提供商凭证）
+- Chrome浏览器（用于应用控制功能）
 
-### Setup
+### 安装步骤
 
-1. **Clone the repository**
-
+1. **克隆仓库**
    ```bash
    git clone https://github.com/modenl/screencontrolagents.git
    cd screencontrolagents
    ```
 
-2. **Install dependencies**
-
+2. **安装依赖**
    ```bash
    npm install
    ```
 
-3. **Environment Configuration** Create a `.env` file in the root directory:
-
+3. **环境配置**
+   创建 `.env` 文件：
    ```env
-   # OpenAI Configuration
+   # OpenAI配置
    OPENAI_API_KEY=your_openai_api_key_here
-
-   # Google AI Configuration (optional)
+   
+   # Google AI配置（可选）
    GOOGLE_API_KEY=your_google_api_key_here
-
-   # Application Configuration
+   
+   # 应用配置
    NODE_ENV=development
    LOG_LEVEL=info
-
-   # Security Configuration
-   ENCRYPTION_KEY=your_32_character_encryption_key_here
-   SESSION_SECRET=your_session_secret_here
    ```
 
-4. **Configure Application** Edit `src/config/config.js` to customize:
-
-   - AI model selection and parameters
-   - UI window settings
-   - Logging preferences
-   - Development options
-
-5. **Run the Application**
-
+4. **运行应用**
    ```bash
-   # Development mode with hot reload
+   # 智能开发模式（推荐）
    npm run dev:smart
-
-   # Simple development mode
+   
+   # 简单启动
    npm start
-
-   # Build Svelte components
+   
+   # 构建Svelte组件
    npm run build
-
-   # Debug mode with Chrome DevTools
+   
+   # 调试模式
    npm run debug
    ```
 
-## Usage
+## 📱 使用指南
 
-### Initial Setup
+### 应用启动
 
-1. **First Launch**: Application starts in Child mode with default settings
-2. **Parent Access**: Use password authentication to switch to Parent mode
-3. **System Configuration**: Configure time limits, game access, and security
-   settings
-4. **Chrome Integration**: Ensure Chrome browser is available for game control
+使用新的启动脚本：
+```bash
+# 启动特定应用
+node scripts/start-app.js chess-game
+node scripts/start-app.js game-time-manager
 
-### Daily Operation
-
-1. **Child Interaction**: Natural language conversation for game requests and
-   time queries
-2. **Automatic Monitoring**: System tracks gaming sessions and enforces time
-   limits
-3. **Dynamic UI**: Adaptive Cards provide context-appropriate interfaces
-4. **Parent Oversight**: Switch to Parent mode for detailed control and
-   monitoring
-
-### Role Management
-
-- **Child → Parent**: Requires password authentication
-- **Parent → Child**: Simple role switch without authentication
-- **State Persistence**: System remembers role and context across sessions
-
-## API Integration
-
-### AI Model Usage
-
-```javascript
-// Example CoreAgent interaction
-const agent = new CoreAgent();
-await agent.initialize();
-
-const response = await agent.processInput(
-  'I want to play Minecraft for 30 minutes',
-  { currentTime: new Date().toISOString() }
-);
+# 使用默认应用启动
+npm start
 ```
 
-### MCP Function Calls
+### 应用配置
 
+每个应用都有独立的配置文件：
+
+**国际象棋应用** (`apps/chess-game/config.js`)
 ```javascript
-// Example MCP server interaction
-const mcpServer = new MCPServer();
-const result = await mcpServer.handleRequest({
-  method: 'chrome_create_tab',
-  params: { url: 'https://minecraft.net' }
-});
+module.exports = {
+  name: "chess-game",
+  displayName: "国际象棋",
+  description: "AI驱动的国际象棋游戏",
+  aiModel: "gpt-4o-mini",
+  // 其他配置...
+};
 ```
 
-### Streaming Responses
+**游戏时间管理** (`apps/game-time-manager/config.js`)
+```javascript
+module.exports = {
+  name: "game-time-manager",
+  displayName: "游戏时间管理",
+  description: "儿童游戏时间智能管理系统",
+  aiModel: "gpt-4o-mini",
+  // 其他配置...
+};
+```
+
+### 对话交互
+
+启动应用后，可以通过自然语言与AI代理交互：
+
+**国际象棋应用示例**
+- "开始一局新游戏"
+- "我想下e4"
+- "分析当前局面"
+- "悔棋"
+
+**游戏时间管理示例**
+- "我想玩30分钟游戏"
+- "还剩多少时间？"
+- "切换到家长模式"
+- "设置新的时间限制"
+
+## 🛠️ 开发指南
+
+### 创建新应用
+
+1. **创建应用目录**
+   ```bash
+   mkdir apps/my-new-app
+   cd apps/my-new-app
+   ```
+
+2. **创建配置文件** (`config.js`)
+   ```javascript
+   module.exports = {
+     name: "my-new-app",
+     displayName: "我的新应用",
+     description: "应用描述",
+     aiModel: "gpt-4o-mini",
+     mcpActions: ["action1", "action2"]
+   };
+   ```
+
+3. **创建提示词文件** (`my-new-app-prompt.md`)
+   ```markdown
+   # 我的新应用提示词
+   
+   你是一个专业的应用助手...
+   ```
+
+4. **创建MCP动作** (`mcp-actions/my-action.js`)
+   ```javascript
+   module.exports = {
+     name: "my_action",
+     description: "执行特定动作",
+     handler: async (params) => {
+       // 动作逻辑
+       return { success: true };
+     }
+   };
+   ```
+
+### 可用脚本
+
+- `npm start` - 启动应用（开发模式）
+- `npm run dev` - 构建Svelte组件（监听模式）
+- `npm run dev:smart` - 智能开发模式（并发构建和启动）
+- `npm run debug` - 调试模式（启用Chrome DevTools）
+- `npm run build` - 构建生产资源
+- `npm run setup` - 项目初始化设置
+
+### 调试功能
+
+- **热重载**: 开发期间自动重新构建组件
+- **调试模式**: Chrome DevTools集成调试
+- **详细日志**: 多级别日志记录和文件输出
+- **状态检查**: 实时状态监控和调试
+
+## 🔧 配置说明
+
+### 全局配置 (`app.config.js`)
 
 ```javascript
-// Example streaming interaction
-const response = await agent.processInputStreaming(
-  'How much time do I have left?',
-  {},
-  chunk => {
-    // Handle streaming response chunks
-    console.log('Received chunk:', chunk);
+module.exports = {
+  // 默认应用
+  defaultApp: "game-time-manager",
+  
+  // AI模型配置
+  ai: {
+    orchestrator: "gemini-2.0-flash-exp",
+    education: "gpt-4o-mini",
+    ui: "gpt-4o-mini"
+  },
+  
+  // 窗口配置
+  window: {
+    width: 1200,
+    height: 800,
+    webSecurity: false
   }
-);
+};
 ```
 
-## Development
+### 框架配置 (`framework/config/framework-config.js`)
 
-### Project Structure
+包含框架级别的配置，如日志设置、MCP服务器配置等。
 
-```
-screencontrolagents/
-├── src/
-│   ├── config/           # Configuration files
-│   │   ├── config.js     # Main application configuration
-│   │   └── agent-config.js # AI agent configuration
-│   ├── main/            # Main process (Electron)
-│   │   ├── main.js      # Application entry point
-│   │   ├── core-agent.js # Unified AI agent
-│   │   ├── mcp-server.js # MCP function implementation
-│   │   ├── chrome-controller.js # Browser control
-│   │   ├── ai-client-factory.js # AI model integration
-│   │   └── logger.js    # Logging system
-│   ├── renderer/        # Renderer process (UI)
-│   │   ├── svelte/      # Svelte components
-│   │   │   ├── App.svelte
-│   │   │   └── components/
-│   │   │       ├── ChatWindow.svelte
-│   │   │       └── AdaptiveCardPanel.svelte
-│   │   ├── bundle/      # Built assets
-│   │   └── preload.js   # Electron preload script
-│   └── prompts/         # AI system prompts
-│       ├── base-prompt.md # Core system instructions
-│       ├── business-prompt.md # Business logic
-│       └── core-agent-prompt.md # Agent behavior
-├── scripts/             # Build and utility scripts
-├── package.json         # Dependencies and scripts
-└── README.md           # This file
-```
+## 🔒 安全特性
 
-### Key Technologies
+### 系统完整性
+- **进程监控**: 检测未授权软件和调试工具
+- **Chrome集成**: 安全的浏览器控制和权限管理
+- **会话管理**: 安全的角色切换和身份验证
+- **审计日志**: 完整的活动跟踪和安全分析
 
-- **Electron**: Cross-platform desktop framework
-- **Svelte**: Reactive UI framework
-- **Multiple AI Providers**: OpenAI, Google, Anthropic support
-- **Microsoft Adaptive Cards**: Dynamic UI generation
-- **Chrome DevTools Protocol**: Direct browser control
-- **Node.js**: Server-side JavaScript runtime
+### 访问控制
+- **基于角色的权限**: 每个角色有特定的允许功能
+- **密码保护**: 安全的家长模式访问
+- **功能限制**: MCP功能按用户角色限制
+- **状态验证**: 全面的状态转换验证
 
-### Available Scripts
+## 🐛 故障排除
 
-- `npm start` - Start application in development mode
-- `npm run dev` - Build Svelte components with watch mode
-- `npm run dev:smart` - Concurrent build and app start
-- `npm run debug` - Start with Chrome DevTools enabled
-- `npm run build` - Build production assets
-- `npm run lint` - Run ESLint on source code
-- `npm run test:core` - Test core agent functionality
+### 常见问题
 
-### Development Features
+**应用无法启动**
+- 检查Node.js版本（需要18+）
+- 验证所有依赖已安装：`npm install`
+- 确保AI API密钥在`.env`文件中有效
 
-- **Hot Reload**: Automatic component rebuilding during development
-- **Debug Mode**: Chrome DevTools integration for debugging
-- **Comprehensive Logging**: Multi-level logging with file output
-- **State Inspection**: Real-time state monitoring and debugging
-- **Mock Data**: Development-friendly mock data options
+**AI响应不工作**
+- 验证环境变量中的API密钥
+- 检查网络连接
+- 查看API使用限制和计费
 
-## Security Features
+**Chrome控制问题**
+- 确保Chrome浏览器已安装且可访问
+- 检查Chrome DevTools协议端口可用性
+- 验证浏览器控制的系统权限
 
-### System Integrity
+### 日志和调试
 
-- **Process Monitoring**: Detection of unauthorized software and debugging tools
-- **Chrome Integration**: Secure browser control with permission management
-- **Session Management**: Secure role switching and authentication
-- **Audit Logging**: Complete activity tracking for security analysis
+- **应用日志**: 检查控制台输出和日志文件
+- **调试模式**: 使用`npm run debug`启用Chrome DevTools
+- **详细日志**: 在环境中设置`LOG_LEVEL=debug`
+- **状态检查**: 在调试模式下使用开发工具
 
-### Access Control
+## 🤝 贡献指南
 
-- **Role-Based Permissions**: Each role has specific allowed functions
-- **Password Protection**: Secure parent mode access
-- **Function Restrictions**: MCP functions restricted by user role
-- **State Validation**: Comprehensive state transition validation
+1. Fork 仓库
+2. 创建功能分支：`git checkout -b feature-name`
+3. 进行更改并适当测试
+4. 运行代码检查：`npm run lint`
+5. 提交详细描述的Pull Request
 
-## Troubleshooting
+## 📄 许可证
 
-### Common Issues
+本项目采用MIT许可证 - 详见LICENSE文件。
 
-**Application won't start**
+## 🆘 支持
 
-- Check Node.js version (18+ required)
-- Verify all dependencies are installed: `npm install`
-- Ensure AI API keys are valid in `.env` file
+如需支持和问题咨询：
 
-**AI responses not working**
+- 在[GitHub](https://github.com/modenl/screencontrolagents/issues)创建issue
+- 查看上述故障排除部分
+- 查阅配置文档
 
-- Verify API keys in environment variables
-- Check internet connection
-- Review API usage limits and billing
+## 🙏 致谢
 
-**Chrome control issues**
-
-- Ensure Chrome browser is installed and accessible
-- Check Chrome DevTools Protocol port availability
-- Verify system permissions for browser control
-
-**Streaming responses not displaying**
-
-- Check console for JavaScript errors
-- Verify Svelte components are built: `npm run build`
-- Test with `npm run dev:smart` for development mode
-
-### Logs and Debugging
-
-- Application logs: Check console output and log files
-- Debug mode: Use `npm run debug` for Chrome DevTools
-- Verbose logging: Set `LOG_LEVEL=debug` in environment
-- State inspection: Use development tools in debug mode
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Make your changes with proper testing
-4. Run linting: `npm run lint`
-5. Submit a pull request with detailed description
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for
-details.
-
-## Support
-
-For support and questions:
-
-- Create an issue on
-  [GitHub](https://github.com/modenl/screencontrolagents/issues)
-- Check the troubleshooting section above
-- Review the configuration documentation
-
-## Acknowledgments
-
-- OpenAI for GPT API integration
-- Google for Gemini API support
-- Microsoft for Adaptive Cards framework
-- Electron team for cross-platform framework
-- Svelte team for reactive UI framework
+- OpenAI提供GPT API集成
+- Google提供Gemini API支持
+- Microsoft提供Adaptive Cards框架
+- Electron团队提供跨平台框架
+- Svelte团队提供响应式UI框架
