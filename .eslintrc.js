@@ -51,7 +51,7 @@ module.exports = {
   },
   overrides: [
     {
-      files: ['src/renderer/**/*.js'],
+      files: ['framework/renderer/**/*.js'],
       env: {
         browser: true,
         node: false
@@ -61,14 +61,14 @@ module.exports = {
       }
     },
     {
-      files: ['src/main/**/*.js'],
+      files: ['framework/core/**/*.js', 'framework/launcher.js', 'apps/**/mcp-actions/*.js'],
       env: {
         node: true,
         browser: false
       }
     },
     {
-      files: ['src/tests/**/*.js', '**/*.test.js', '**/*.spec.js'],
+      files: ['**/*.test.js', '**/*.spec.js'],
       env: {
         jest: true
       },

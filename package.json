@@ -11,17 +11,17 @@
 
     "dev": "rollup -c -w",
     "build": "rollup -c",
-    "dev:smart": "concurrently --kill-others \"cross-env CONCURRENTLY_MANAGED=true npm run dev\" \"wait-on src/renderer/bundle/bundle.js && cross-env NODE_ENV=development electron .\"",
-    "debug": "concurrently \"npm run dev\" \"wait-on src/renderer/bundle/bundle.js && cross-env NODE_ENV=development ELECTRON_ENABLE_LOGGING=1 electron . --inspect=9222 --remote-debugging-port=9223\"",
+    "dev:smart": "concurrently --kill-others \"cross-env CONCURRENTLY_MANAGED=true npm run dev\" \"wait-on framework/renderer/bundle/bundle.js && cross-env NODE_ENV=development electron .\"",
+    "debug": "concurrently \"npm run dev\" \"wait-on framework/renderer/bundle/bundle.js && cross-env NODE_ENV=development ELECTRON_ENABLE_LOGGING=1 electron . --inspect=9222 --remote-debugging-port=9223\"",
     "test": "jest",
-    "lint": "eslint src --ext .js,.svelte",
+    "lint": "eslint framework --ext .js,.svelte",
     "lint:svelte": "svelte-check --threshold warning",
     "lint:all": "npm run lint && npm run lint:svelte",
     "lint:summary": "echo '🔍 Running JavaScript/Svelte ESLint...' && npm run lint --silent 2>&1 | tail -3 && echo '\\n🔍 Running Svelte-specific checks...' && npm run lint:svelte --silent 2>&1 | tail -3",
-    "config:agents": "node src/config/test-agent-config.js",
+
     "test:core": "node test-core-agent.js",
 
-    "format": "prettier --write \"src/**/*.{js,svelte,css,html}\"",
+    "format": "prettier --write \"framework/**/*.{js,svelte,css,html}\"",
     "dist": "npm run build && electron-builder"
   },
   "keywords": [
@@ -83,7 +83,8 @@
       "output": "dist"
     },
     "files": [
-      "src/**/*",
+      "framework/**/*",
+      "apps/**/*",
       "node_modules/**/*"
     ],
     "win": {

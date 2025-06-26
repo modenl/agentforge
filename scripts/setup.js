@@ -17,7 +17,7 @@ function question(prompt) {
 
 async function setup() {
   console.log('🎮 Children\'s Game Time Management System Setup\n');
-  
+
   // Check if .env already exists
   const envPath = path.join(__dirname, '..', '.env');
   if (fs.existsSync(envPath)) {
@@ -34,7 +34,7 @@ async function setup() {
 
   // Collect configuration
   const config = {};
-  
+
   config.OPENAI_API_KEY = await question('OpenAI API Key (required): ');
   if (!config.OPENAI_API_KEY) {
     console.log('❌ OpenAI API Key is required. Setup cancelled.');
@@ -43,7 +43,7 @@ async function setup() {
   }
 
   config.OPENAI_MODEL = await question('OpenAI Model (default: gpt-4-1106-preview): ') || 'gpt-4-1106-preview';
-  
+
   console.log('\n📡 Supabase Configuration (optional - for cloud sync):');
   config.SUPABASE_URL = await question('Supabase URL (optional): ');
   config.SUPABASE_ANON_KEY = await question('Supabase Anon Key (optional): ');
@@ -113,14 +113,14 @@ ENABLE_DEV_TOOLS=true
   console.log('   npm start      - Start the application');
   console.log('   npm test       - Run tests');
   console.log('   npm run lint   - Check code quality');
-  
+
   console.log('\n📝 Next steps:');
   console.log('1. Add application icons to the assets/ directory');
-  console.log('2. Customize game whitelist in src/config/config.js');
+  console.log('2. Customize game whitelist in framework/config/framework-config.js');
   console.log('3. Review time management settings');
   console.log('4. Test the application with different user roles');
 
   rl.close();
 }
 
-setup().catch(console.error); 
+setup().catch(console.error);

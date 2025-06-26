@@ -16,8 +16,6 @@ const FRAMEWORK_CONFIG = {
     isDev
   },
 
-
-
   // Window configuration
   window: {
     defaultWidth: 1200,
@@ -56,12 +54,12 @@ const FRAMEWORK_CONFIG = {
     }
   },
 
-  // Plugin system configuration
-  plugins: {
-    autoLoadFromDirectory: false, // Set to true to auto-load plugins from a directory
-    pluginDirectory: path.join(__dirname, '../../plugins'),
+  // App system configuration
+  apps: {
+    autoLoadFromDirectory: false, // Set to true to auto-load apps from a directory
+    appsDirectory: path.join(__dirname, '../../apps'),
     enableHotReload: isDev,
-    sandboxPlugins: false // Set to true for plugin sandboxing (future feature)
+    sandboxApps: false // Set to true for app sandboxing (future feature)
   },
 
   // Storage configuration
@@ -75,7 +73,7 @@ const FRAMEWORK_CONFIG = {
       logs: 'logs',
       config: 'config',
       cache: 'cache',
-      plugins: 'plugins',
+      apps: 'apps',
       userdata: 'userdata'
     }
   },
@@ -157,11 +155,11 @@ function validateConfig(config) {
     throw new Error('Window dimensions must be specified');
   }
 
-  // Plugin directory validation
-  if (config.plugins && config.plugins.autoLoadFromDirectory) {
-    const pluginDir = config.plugins.pluginDirectory;
-    if (!pluginDir || typeof pluginDir !== 'string') {
-      throw new Error('Plugin directory must be specified when auto-loading is enabled');
+  // Apps directory validation
+  if (config.apps && config.apps.autoLoadFromDirectory) {
+    const appsDir = config.apps.appsDirectory;
+    if (!appsDir || typeof appsDir !== 'string') {
+      throw new Error('Apps directory must be specified when auto-loading is enabled');
     }
   }
 }
