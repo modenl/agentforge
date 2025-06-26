@@ -1,18 +1,18 @@
-# Screen Control Agents Framework
+# AgentForge
 
-一个基于AI驱动的智能应用开发框架，提供统一的代理架构、自适应UI和MCP协议集成，让开发者可以快速构建智能桌面应用。
+一个基于LLM+Prompt+MCP的智能代理应用开发框架，提供统一的AI代理架构、自适应UI和系统集成能力，让开发者可以快速构建各种智能桌面应用。
 
 ## 🏗️ 框架架构
 
 ### 框架概述
 
-Screen Control Agents Framework 是一个模块化的应用开发框架，分为**框架层**和**应用层**：
+AgentForge 是一个模块化的智能代理应用开发框架，分为**框架层**和**应用层**：
 
 - **框架层 (Framework)**: 提供核心功能和基础设施
 - **应用层 (Apps)**: 基于框架构建的具体应用
 
 ```
-screencontrolagents/
+agentforge/
 ├── framework/              # 🔧 框架层 - 核心功能
 │   ├── config/            # 框架配置
 │   ├── core/              # 核心组件
@@ -103,7 +103,7 @@ module.exports = {
   // 应用元数据
   appName: '我的新应用',
   version: '1.0.0',
-  description: '基于Screen Control Agents框架的新应用',
+     description: '基于AgentForge框架的新应用',
 
   // 窗口配置
   window: {
@@ -407,8 +407,8 @@ npm run debug               # 调试模式(启用Chrome DevTools)
 
 1. **克隆仓库**
    ```bash
-   git clone https://github.com/modenl/screencontrolagents.git
-   cd screencontrolagents
+   git clone https://github.com/modenl/agentforge.git
+   cd agentforge
    ```
 
 2. **安装依赖**
@@ -496,7 +496,7 @@ npm run debug               # 调试模式(启用Chrome DevTools)
 
 如需支持和问题咨询：
 
-- 在[GitHub](https://github.com/modenl/screencontrolagents/issues)创建issue
+- 在[GitHub](https://github.com/modenl/agentforge/issues)创建issue
 - 查看故障排除部分
 - 查阅框架文档和示例应用
 
