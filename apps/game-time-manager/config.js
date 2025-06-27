@@ -28,27 +28,27 @@ module.exports = {
     initialVariables: {
       // 状态机
       state: 'child_idle',
-      
+
       // 游戏相关（可选字段，初始为空）
       game_id: null,
       game_process_id: null,
-      
+
       // 答题相关（可选字段，初始为空）
       quiz_question_index: null,
       quiz_correct_count: 0,
-      
+
       // 时间管理
       time_available_game: 120,
       time_weekly_limit: 120,
       time_used_this_week: 0,
       time_pending_reward: 0,
-      
+
       // 统计数据
       stats_total_questions_answered: 0,
       stats_total_correct_answers: 0,
       stats_total_game_time_earned: 0,
       stats_last_quiz_date: '',
-      
+
       // 系统配置
       config_parent_password: 'parent123'
     }
@@ -68,4 +68,4 @@ module.exports = {
   development: {
     enableDevTools: process.env.NODE_ENV === 'development'
   }
-}; 
+};

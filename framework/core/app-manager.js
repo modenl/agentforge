@@ -249,14 +249,14 @@ class AppManager {
     }
     
     // Register MCP server configurations from framework config
-    if (this.config.mcpServers && Array.isArray(this.config.mcpServers)) {
+    if (this.config.mcpServers && typeof this.config.mcpServers === 'object') {
       this.mcpManager.registerServerConfigs('framework', this.config.mcpServers);
     }
     
     // Register MCP server configurations from plugin configs
     for (const plugin of this.plugins.values()) {
       const pluginId = plugin.id || plugin.constructor.name;
-      if (plugin.config && plugin.config.mcpServers && Array.isArray(plugin.config.mcpServers)) {
+      if (plugin.config && plugin.config.mcpServers && typeof plugin.config.mcpServers === 'object') {
         this.mcpManager.registerServerConfigs(pluginId, plugin.config.mcpServers);
       }
     }

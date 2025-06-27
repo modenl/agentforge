@@ -24,13 +24,13 @@ console.log('📦 Required modules loaded');
 class UniversalLauncher {
   constructor(appPath) {
     console.log(`🏗️ UniversalLauncher constructor called with appPath: ${appPath}`);
-    
+
     this.appPath = appPath;
     this.appName = path.basename(appPath);
     this.appManager = null;
     this.isInitialized = false;
     this.isShuttingDown = false;
-    
+
     console.log(`📝 App name: ${this.appName}`);
   }
 
@@ -39,7 +39,7 @@ class UniversalLauncher {
    */
   loadConfig() {
     console.log('⚙️ Loading config...');
-    
+
     const configPath = path.join(this.appPath, 'config.js');
     if (!fs.existsSync(configPath)) {
       throw new Error(`Config file not found: ${configPath}`);
@@ -48,9 +48,38 @@ class UniversalLauncher {
     // Clear require cache to ensure fresh config loading
     delete require.cache[require.resolve(configPath)];
     const config = require(configPath);
-    
+
+    // Load MCP configuration from separate mcp.json file if it exists
+    const mcpConfig = this.loadMCPConfig();
+    if (mcpConfig && mcpConfig.mcpServers) {
+      config.mcpServers = mcpConfig.mcpServers;
+      console.log(`✅ MCP config merged: ${Object.keys(mcpConfig.mcpServers).length} servers`);
+    }
+
     console.log(`✅ Config loaded from: ${configPath}`);
     return config;
+  }
+
+  /**
+   * Load MCP configuration from separate mcp.json file
+   */
+  loadMCPConfig() {
+    const mcpConfigPath = path.join(this.appPath, 'mcp.json');
+
+    if (!fs.existsSync(mcpConfigPath)) {
+      console.log(`📋 No separate MCP config found: ${mcpConfigPath}`);
+      return null;
+    }
+
+    try {
+      const mcpConfigContent = fs.readFileSync(mcpConfigPath, 'utf8');
+      const mcpConfig = JSON.parse(mcpConfigContent);
+      console.log(`✅ MCP config loaded from: ${mcpConfigPath}`);
+      return mcpConfig;
+    } catch (error) {
+      console.error(`❌ Failed to load MCP config from ${mcpConfigPath}:`, error);
+      return null;
+    }
   }
 
   /**
@@ -58,17 +87,17 @@ class UniversalLauncher {
    */
   loadBusinessPrompt() {
     console.log('📄 Loading business prompt...');
-    
+
     // Load config to get the prompt file name
     const config = this.loadConfig();
     const configuredPromptFile = config.agent?.promptFile;
-    
+
     // Create list of prompt files to try, prioritizing config setting
     const promptFiles = [];
     if (configuredPromptFile) {
       promptFiles.push(configuredPromptFile);
-    }    
-    
+    }
+
     for (const fileName of promptFiles) {
       const promptPath = path.join(this.appPath, fileName);
       if (fs.existsSync(promptPath)) {
@@ -103,7 +132,7 @@ class UniversalLauncher {
     for (const file of files) {
       try {
         const actionPath = path.join(mcpActionsPath, file);
-        
+
         // Clear require cache for hot reloading
         delete require.cache[require.resolve(actionPath)];
         const actionModule = require(actionPath);
@@ -185,7 +214,7 @@ class UniversalLauncher {
   async initialize() {
     try {
       console.log('🚀 Starting app initialization...');
-      
+
       // Create dynamic plugin
       const AppPluginClass = this.createAppPlugin();
       const appPlugin = new AppPluginClass(null); // Will be properly initialized by AppManager
@@ -207,14 +236,14 @@ class UniversalLauncher {
       // Create and initialize the application manager
       console.log('🏗️ Creating AppManager...');
       this.appManager = new AppManager(finalConfig);
-      
+
       console.log('⚡ Initializing AppManager...');
       await this.appManager.initialize();
 
       // Create the main window
       console.log('🪟 Creating main window...');
       const window = await this.appManager.createMainWindow();
-      
+
       if (window) {
         console.log('✅ Main window created successfully');
       } else {
@@ -263,12 +292,12 @@ class UniversalLauncher {
 function launchApp(appPath) {
   console.log('🚀 launchApp function called');
   console.log(`📥 Received appPath: ${appPath}`);
-  
+
   // Get app path from command line arguments if not provided
   if (!appPath) {
     const args = process.argv.slice(2);
     console.log(`📋 Command line args: ${JSON.stringify(args)}`);
-    
+
     if (args.length === 0) {
       throw new Error('No app path specified. Usage: electron . <app-path>');
     }
@@ -295,8 +324,8 @@ function launchApp(appPath) {
 
   // Set up Electron app event handlers
   console.log('⚡ Setting up Electron event handlers...');
-  
-  app.whenReady().then(async () => {
+
+  app.whenReady().then(async() => {
     console.log('🚀 Electron app is ready, starting initialization...');
     await launcher.initialize();
   });
@@ -316,7 +345,7 @@ function launchApp(appPath) {
     }
   });
 
-  app.on('activate', async () => {
+  app.on('activate', async() => {
     console.log('🔄 App activated');
     // On macOS, re-create window when dock icon is clicked
     if (launcher.isInitialized && launcher.appManager) {
@@ -327,19 +356,19 @@ function launchApp(appPath) {
     }
   });
 
-  app.on('before-quit', async (event) => {
+  app.on('before-quit', async(event) => {
     console.log('🛑 App about to quit');
     // Prevent quit until cleanup is complete
     if (launcher.isInitialized && !launcher.isShuttingDown) {
       event.preventDefault();
       launcher.isShuttingDown = true;
-      
+
       // Set a timeout to prevent hanging
       const cleanupTimeout = setTimeout(() => {
         console.log('⏰ Cleanup timeout, forcing quit');
         process.exit(0);
       }, 3000);
-      
+
       try {
         await launcher.shutdown();
         console.log('✅ Cleanup completed');
@@ -389,4 +418,4 @@ console.log(`module.filename: ${module.filename}`);
 
 // Since Electron loads files differently, we'll launch regardless
 console.log('🚀 Launching app regardless of main module check...');
-launchApp(); 
+launchApp();

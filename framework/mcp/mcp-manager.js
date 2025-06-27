@@ -47,14 +47,16 @@ class MCPManager extends EventEmitter {
    * @param {Array} serverConfigs - Array of MCP server configurations
    */
   registerServerConfigs(appId, serverConfigs) {
-    if (!Array.isArray(serverConfigs)) {
-      this.logger.warn(`Invalid MCP server configs for app ${appId}: not an array`);
+    if (typeof serverConfigs !== 'object' || serverConfigs === null) {
+      this.logger.warn(`Invalid MCP server configs for app ${appId}: not an object`);
       return;
     }
 
-    this.logger.info(`Registering ${serverConfigs.length} MCP server configs for app: ${appId}`);
+    const configs = Array.isArray(serverConfigs) ? serverConfigs : Object.entries(serverConfigs).map(([name, config]) => ({ name, ...config }));
+
+    this.logger.info(`Registering ${configs.length} MCP server configs for app: ${appId}`);
     
-    for (const config of serverConfigs) {
+    for (const config of configs) {
       if (!config.name) {
         this.logger.warn(`Skipping MCP server config without name for app ${appId}`);
         continue;

@@ -1,0 +1,85 @@
+---
+description: Screen Control Agents Project Rules - Critical guidelines for development
+globs: 
+alwaysApply: true
+---
+
+---
+description: Screen Control Agents Project Rules - Critical guidelines for development
+alwaysApply: true
+---
+
+# Screen Control Agents Project Rules
+
+## 🚫 CRITICAL ALWAYS RULES
+
+- **NEVER AUTO-RUN APPLICATIONS** - Never automatically run, start, launch, or execute applications without explicit user request
+- **NEVER AUTO-ADD TESTS** - Never automatically create, add, or suggest test files without explicit user request
+- **NEVER AUTO-ADD DOCUMENTATION** - Never automatically create, add, or suggest documentation files without explicit user request
+
+## 📝 Code Development Rules
+
+### File Creation Protocol
+Before creating ANY file, ask yourself:
+1. Is this a documentation file? (.md, .txt, .doc, etc.)
+2. Is this a test file? (.html, .test._, .spec._, etc.)
+3. Was I specifically asked to create this type of file?
+
+**If ANY answer is yes to #1 or #2 and no to #3, then STOP and ASK FIRST.**
+
+### Code Modification Guidelines
+- Always ask before making major architectural changes
+- Prefer editing existing files over creating new ones
+- Keep changes focused and minimal
+- Preserve existing functionality when refactoring
+
+### Code Simplicity Rules
+- **AVOID SPECIAL CASE LOGIC** - Minimize Array.isArray(), typeof checks, and format conversions
+- **ENFORCE DATA CONTRACTS** - Use prompts to strictly require correct data formats instead of handling multiple formats
+- **GLOBAL/ASSIST DATA MUST BE OBJECTS** - Never arrays or strings, always proper AdaptiveCard objects
+- **NO COMPATIBILITY LAYERS** - Remove legacy format support, enforce single correct format
+- **PREFER PROMPT FIXES** - Fix data format issues in AI prompts, not in processing code
+
+## 🤖 AI Model Configuration Rules
+
+- **NEVER modify the configured AI models** in src/config/config.js
+
+## 🎯 Project-Specific Rules
+
+- This is an Electron app with Svelte frontend
+- Adaptive cards should follow single-card paradigm (0 or 1 cards only)
+- Streaming performance is critical - avoid performance-impacting logs
+- Maintain compatibility with existing GPT agent integration
+
+## 🔍 Development Practices
+
+### Debug and Logging
+- Remove excessive debug logs that impact performance
+- Keep error handling and critical logs
+- Don't add verbose console.log statements without request
+- Focus on clean, production-ready code
+
+### File Organization
+- Follow existing project structure
+- Don't reorganize files without explicit request
+- Respect the current folder hierarchy
+- Ask before adding new directories
+
+### Communication
+- Ask clarifying questions when requirements are unclear
+- Confirm before making destructive changes
+- Explain the impact of proposed changes
+- Suggest alternatives when appropriate
+
+## ✅ Best Practices
+
+- Focus on the specific task requested
+- Make minimal, targeted changes
+- Preserve existing functionality
+- Ask for guidance when uncertain
+- Test builds after significant changes
+- Use consistent coding style with existing codebase
+
+
+
+

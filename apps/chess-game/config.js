@@ -28,19 +28,19 @@ module.exports = {
     initialVariables: {
       // 状态机
       state: 'game_menu',
-      
+
       // 棋局核心
       boardState: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR',  // 使用标准FEN格式
       current_player: 'white',  // 白方先走（标准国际象棋规则）
-      
+
       // 游戏状态
       game_status: 'active',
       game_result: null,
-      
+
       // 走法记录
       move_history: [],
       last_move: null,
-      
+
       // 用户配置
       player_color: 'white',   // 用户执白棋
       ai_difficulty: 'medium'
@@ -53,17 +53,5 @@ module.exports = {
     aiColor: 'black',
     difficulty: 'master',
     showAnalysis: true
-  },
-
-  // External MCP Servers Configuration
-  mcpServers: [
-    {
-      name: 'everything-server',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-everything'],
-      env: {},
-      description: 'Comprehensive MCP server with various tools for testing and development',
-      transport: 'stdio'
-    }
-  ]
-}; 
+  }
+};
