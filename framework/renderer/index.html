@@ -5,8 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:;">
-  <title>Loading...</title>
+    content="default-src 'self' http://localhost:*; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https: http://localhost:* ws://localhost:*; frame-src 'self' http://localhost:* https://localhost:* http: https:; frame-ancestors 'none';">
+  <title>Framework App</title>
 
   <!-- Preload fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -165,15 +165,7 @@
       transform: translateY(-1px);
     }
 
-    /* Disable text selection in child mode for UI controls, but allow chat content selection */
-    .child-mode * {
-      user-select: none !important;
-      -webkit-user-select: none !important;
-      -moz-user-select: none !important;
-      -ms-user-select: none !important;
-    }
-
-    /* Override: Allow text selection in chat content (all modes) */
+    /* Allow text selection in chat content (all apps) */
     .message-content,
     .message-content *,
     .markdown-content,
@@ -186,20 +178,8 @@
       -ms-user-select: text !important;
       cursor: text !important;
     }
-
-    /* Ensure child mode overrides work properly */
-    .child-mode .message-content,
-    .child-mode .message-content *,
-    .child-mode .markdown-content,
-    .child-mode .markdown-content *,
-    .child-mode .text-content,
-    .child-mode .text-content * {
-      user-select: text !important;
-      -webkit-user-select: text !important;
-      -moz-user-select: text !important;
-      -ms-user-select: text !important;
-      cursor: text !important;
-    }
+    
+    /* Apps can add their own selection rules via custom CSS classes */
 
     /* Hide scrollbars */
     ::-webkit-scrollbar {
@@ -322,6 +302,21 @@
         }
       }, 2000);
     });
+    
+    // Also set window title from window.appName
+    window.addEventListener('load', () => {
+      // Check for appName periodically
+      const checkTitle = setInterval(() => {
+        if (window.appName && window.appName !== 'Loading...' && document.title === 'Loading...') {
+          console.log('[HTML] Setting title from window.appName:', window.appName);
+          document.title = window.appName;
+          clearInterval(checkTitle);
+        }
+      }, 100);
+      
+      // Stop checking after 5 seconds
+      setTimeout(() => clearInterval(checkTitle), 5000);
+    });
 
     // Error handling
     window.addEventListener('error', (event) => {
@@ -343,6 +338,33 @@
       console.warn('ElectronAPI not available - running in web mode');
     }
 
+    // Dev mode detection and UI indication
+    if (window.electronAPI && window.electronAPI.isDev) {
+      console.log('🔧 Running in development mode');
+      
+      // Add dev mode indicator to the body
+      document.body.classList.add('dev-mode');
+      
+      // Create dev mode badge
+      const devBadge = document.createElement('div');
+      devBadge.id = 'dev-mode-badge';
+      devBadge.innerHTML = '🔧 DEV';
+      devBadge.style.cssText = `
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background: rgba(255, 165, 0, 0.9);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+        z-index: 99999;
+        pointer-events: none;
+      `;
+      document.body.appendChild(devBadge);
+    }
+
     // Prevent default behaviors in production
     document.addEventListener('keydown', (event) => {
       // Block F12 (dev tools) in production
@@ -356,6 +378,15 @@
         event.preventDefault();
         return false;
       }
+      
+      // Dev mode shortcuts
+      if (window.electronAPI?.isDev) {
+        // Ctrl+R to reload in dev mode
+        if (event.ctrlKey && event.key === 'r') {
+          event.preventDefault();
+          location.reload();
+        }
+      }
     });
 
     // Prevent context menu in production
@@ -366,14 +397,8 @@
       }
     });
 
-    // Auto-focus prevention in child mode
-    document.addEventListener('blur', () => {
-      if (window.electronAPI?.currentRole === 'Child') {
-        setTimeout(() => {
-          window.focus();
-        }, 100);
-      }
-    });
+    // Auto-focus prevention - let apps decide when to prevent blur
+    // Apps can implement their own blur prevention logic if needed
 
     console.log('🎮 Framework App - Svelte版本已加载');
   </script>
