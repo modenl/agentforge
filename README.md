@@ -84,14 +84,7 @@ if (user.role === 'admin' && time > workHours) {
   "servers": {
     "chess-trainer-mcp": {
       "command": "node",
-      "args": ["../apps/chess-game/mcp-server.js"],
-      "experimental": {
-        "embedding": {
-          "enabled": true,
-          "features": ["webview"],
-          "port": 3456
-        }
-      }
+      "args": ["../apps/chess-game/mcp-server.js"]
     }
   }
 }
@@ -180,16 +173,8 @@ AgentForge 引入了两个突破性的GUI概念，彻底改变了传统的用户
 2. **WebView嵌入模式**: MCP服务器运行独立Web服务，在WebView中展示完整界面
 
 ```javascript
-// MCP服务器配置WebView支持
-{
-  "experimental": {
-    "embedding": {
-      "enabled": true,
-      "features": ["webview"],  // 保持向后兼容
-      "port": 3456  // UI服务端口
-    }
-  }
-}
+// MCP服务器通过提供 get_embeddable_url 工具来支持WebView
+// 框架会自动检测此工具的存在并启用WebView支持
 
 // MCP工具返回WebView配置
 handler: async (params) => {
@@ -480,14 +465,7 @@ module.exports = {
     "my-app-mcp": {
       "command": "node",
       "args": ["./mcp-server.js"],
-      "description": "我的应用MCP服务器",
-      "experimental": {
-        "embedding": {
-          "enabled": true,
-          "features": ["webview"],
-          "port": 3457
-        }
-      }
+      "description": "我的应用MCP服务器"
     }
   }
 }
