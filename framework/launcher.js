@@ -57,6 +57,7 @@ class UniversalLauncher {
     }
 
     console.log(`✅ Config loaded from: ${configPath}`);
+    console.log(`🏷️ Config appName: "${config.appName}"`);
     return config;
   }
 
@@ -115,53 +116,53 @@ class UniversalLauncher {
   }
 
   /**
-   * Dynamically load MCP actions
+   * Dynamically load MCP tools
    */
-  loadMCPActions() {
-    const mcpActionsPath = path.join(this.appPath, 'mcp-actions');
-    const actions = {};
+  loadMCPTools() {
+    const mcpToolsPath = path.join(this.appPath, 'mcp-tools');
+    const tools = {};
 
-    if (!fs.existsSync(mcpActionsPath)) {
-      logger.info(`No MCP actions directory found: ${mcpActionsPath}`);
-      return actions;
+    if (!fs.existsSync(mcpToolsPath)) {
+      logger.info(`No MCP tools directory found: ${mcpToolsPath}`);
+      return tools;
     }
 
-    // Scan for .js files in mcp-actions directory
-    const files = fs.readdirSync(mcpActionsPath).filter(file => file.endsWith('.js'));
+    // Scan for .js files in mcp-tools directory
+    const files = fs.readdirSync(mcpToolsPath).filter(file => file.endsWith('.js'));
 
     for (const file of files) {
       try {
-        const actionPath = path.join(mcpActionsPath, file);
+        const toolPath = path.join(mcpToolsPath, file);
 
         // Clear require cache for hot reloading
-        delete require.cache[require.resolve(actionPath)];
-        const actionModule = require(actionPath);
+        delete require.cache[require.resolve(toolPath)];
+        const toolModule = require(toolPath);
 
         // Get the base name without extension
-        const actionName = path.basename(file, '.js');
+        const toolName = path.basename(file, '.js');
 
         // If module exports multiple functions, add them with prefixes
-        if (typeof actionModule === 'object' && actionModule !== null) {
-          for (const [key, value] of Object.entries(actionModule)) {
+        if (typeof toolModule === 'object' && toolModule !== null) {
+          for (const [key, value] of Object.entries(toolModule)) {
             if (typeof value === 'function') {
-              const fullActionName = `${actionName}.${key}`;
-              actions[fullActionName] = value;
-              logger.debug(`Loaded MCP action: ${fullActionName}`);
+              const fullToolName = `${toolName}.${key}`;
+              tools[fullToolName] = value;
+              logger.debug(`Loaded MCP tool: ${fullToolName}`);
             }
           }
         }
         // If module exports a single function, use the file name
-        else if (typeof actionModule === 'function') {
-          actions[actionName] = actionModule;
-          logger.debug(`Loaded MCP action: ${actionName}`);
+        else if (typeof toolModule === 'function') {
+          tools[toolName] = toolModule;
+          logger.debug(`Loaded MCP tool: ${toolName}`);
         }
       } catch (error) {
-        logger.error(`Failed to load MCP action ${file}:`, error);
+        logger.error(`Failed to load MCP tool ${file}:`, error);
       }
     }
 
-    logger.info(`Loaded ${Object.keys(actions).length} MCP actions from ${this.appName}`);
-    return actions;
+          logger.info(`Loaded ${Object.keys(tools).length} MCP tools from ${this.appName}`);
+    return tools;
   }
 
   /**
@@ -170,7 +171,7 @@ class UniversalLauncher {
   createAppPlugin() {
     const config = this.loadConfig();
     const businessPrompt = this.loadBusinessPrompt();
-    const mcpActions = this.loadMCPActions();
+    const mcpTools = this.loadMCPTools();
 
     // Create a class that AppManager can instantiate
     class AppPlugin {
@@ -180,7 +181,7 @@ class UniversalLauncher {
         this.appManager = appManager;
         this.config = config;
         this.businessPrompt = businessPrompt;
-        this.mcpActions = mcpActions;
+        this.mcpTools = mcpTools;
       }
 
       getConfig() {
@@ -191,8 +192,8 @@ class UniversalLauncher {
         return this.businessPrompt;
       }
 
-      registerMCPActions() {
-        return this.mcpActions;
+      registerMCPTools() {
+        return this.mcpTools;
       }
 
       async initialize() {
@@ -235,6 +236,7 @@ class UniversalLauncher {
 
       // Create and initialize the application manager
       console.log('🏗️ Creating AppManager...');
+      console.log('📋 Passing to AppManager - appName:', finalConfig.appName);
       this.appManager = new AppManager(finalConfig);
 
       console.log('⚡ Initializing AppManager...');

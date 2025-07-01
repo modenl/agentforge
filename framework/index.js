@@ -124,11 +124,11 @@ class BasePlugin {
   }
 
   /**
-   * Register MCP actions
-   * Override this method to register your plugin's actions
-   * @returns {Object} Map of action names to handler functions
+   * Register MCP tools
+   * Override this method to register your plugin's tools
+   * @returns {Object} Map of tool names to handler functions
    */
-  registerMCPActions() {
+  registerMCPTools() {
     return {};
   }
 

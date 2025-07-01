@@ -363,30 +363,29 @@
         if (compact) {
           // 紧凑模式样式（用于输入辅助卡片）
           renderedCard.style.cssText = `
-            background: rgba(255, 255, 255, 0.95);
-            border: 1px solid rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-            padding: 8px 12px;
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 8px 16px;
             margin: 0;
-            color: #333;
+            color: #212121;
             width: 100%;
-            font-family: "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: 'Roboto', 'Microsoft YaHei', 'PingFang SC', sans-serif;
             font-size: 0.9em;
           `;
         } else {
           // 标准模式样式（用于右侧面板卡片）
           renderedCard.style.cssText = `
-              background: rgba(255, 255, 255, 0.1);
-              backdrop-filter: blur(10px);
-              border: 1px solid rgba(255, 255, 255, 0.2);
-              border-radius: 12px;
-              padding: 12px;
+              background: #ffffff;
+              border: 1px solid #e0e0e0;
+              border-radius: 4px;
+              padding: 16px;
               margin-bottom: 16px;
-              color: white;
+              color: #212121;
               width: 100%;
               max-width: 100%;
               box-sizing: border-box;
-              font-family: "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+              font-family: 'Roboto', 'Microsoft YaHei', 'PingFang SC', sans-serif;
             `;
         }
 
@@ -414,27 +413,28 @@
     const errorDiv = document.createElement('div');
     errorDiv.className = 'card-error';
     errorDiv.style.cssText = `
-      background: rgba(255, 100, 100, 0.2);
-      border: 1px solid rgba(255, 100, 100, 0.4);
-      border-radius: 12px;
+      background: #f44336;
+      border: 1px solid #f44336;
+      border-radius: 4px;
       padding: 16px;
       margin-bottom: 16px;
       color: white;
       width: fit-content;
       min-width: 250px;
       max-width: 450px;
+      opacity: 0.9;
     `;
 
     errorDiv.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-weight: 600;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-weight: 600;">
         <span style="font-size: 1.2em;">⚠️</span>
-        卡片渲染错误
+        Card Render Error
       </div>
       <div style="margin-bottom: 8px; font-size: 0.9em; opacity: 0.8;">
-        错误信息: ${errorMessage}
+        Error: ${errorMessage}
       </div>
-      <details style="margin-top: 12px;">
-        <summary style="cursor: pointer; font-size: 0.9em; opacity: 0.8;">查看原始数据</summary>
+      <details style="margin-top: 16px;">
+        <summary style="cursor: pointer; font-size: 0.9em; opacity: 0.8;">View Raw Data</summary>
         <pre style="margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 0.8em; overflow-x: auto;">${JSON.stringify(cardData, null, 2)}</pre>
       </details>
     `;
@@ -498,33 +498,7 @@
     padding: 0;
   }
 
-  .loading-indicator {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 16px;
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 0.95em;
-  }
-
-  .spinner {
-    width: 20px;
-    height: 20px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-top: 2px solid white;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
-      transform: rotate(360deg);
-    }
-  }
+  /* Loading spinner removed - no animations */
 
   /* 全局样式用于渲染的卡片 */
   :global(.adaptive-card) {
@@ -543,8 +517,8 @@
 
   /* AdaptiveCard 按钮样式 */
   :global(.adaptive-card .ac-pushButton) {
-    background: #007bff !important;
-    border: 1px solid #007bff !important;
+    background: #1976d2 !important;
+    border: 1px solid #1976d2 !important;
     color: white !important;
     border-radius: 4px !important;
     width: 120px !important;
@@ -559,11 +533,12 @@
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
-    padding: 8px 12px !important;
+    padding: 8px 16px !important;
     cursor: pointer !important;
     font-weight: 500 !important;
     font-size: 13px !important;
     margin: 2px !important;
+    transition: none !important;
   }
 
   /* 移除按钮焦点轮廓 */
@@ -573,12 +548,13 @@
   }
 
   :global(.adaptive-card .ac-pushButton:hover) {
-    background: #0056b3 !important;
-    border: 1px solid #0056b3 !important;
+    background: #1565c0 !important;
+    border: 1px solid #1565c0 !important;
   }
 
   :global(.adaptive-card .ac-pushButton:active) {
-    background: #004085 !important;
+    background: #1565c0 !important;
+    opacity: 0.8 !important;
   }
 
 
@@ -587,11 +563,11 @@
   :global(.adaptive-card .ac-numberInput),
   :global(.adaptive-card .ac-choiceSetInput) {
     background: #ffffff !important;
-    border: 1px solid #ced4da !important;
-    color: #333333 !important;
+    border: 1px solid #e0e0e0 !important;
+    color: #212121 !important;
     border-radius: 4px !important;
-    padding: 8px 12px !important;
-    transition: all 0.2s ease !important;
+    padding: 8px 16px !important;
+    transition: none !important;
     margin: 4px 0 !important;
     width: 100% !important;
     box-sizing: border-box !important;
@@ -600,19 +576,18 @@
 
   :global(.adaptive-card .ac-textInput:focus),
   :global(.adaptive-card .ac-numberInput:focus) {
-    border-color: #007bff !important;
+    border-color: #1976d2 !important;
     outline: none !important;
-    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25) !important;
   }
 
   :global(.adaptive-card .ac-textInput::placeholder),
   :global(.adaptive-card .ac-numberInput::placeholder) {
-    color: #6c757d !important;
+    color: #9e9e9e !important;
   }
 
   /* AdaptiveCard 文本样式 */
   :global(.adaptive-card .ac-textBlock) {
-    color: #333333 !important;
+    color: #212121 !important;
     line-height: 1.5 !important;
     width: 100% !important;
     max-width: none !important;
@@ -624,8 +599,8 @@
   /* AdaptiveCard 容器样式 */
   :global(.adaptive-card .ac-container) {
     background: #ffffff !important;
-    border-radius: 8px !important;
-    border: 1px solid #e9ecef !important;
+    border-radius: 4px !important;
+    border: 1px solid #e0e0e0 !important;
   }
 
   /* AdaptiveCard 列样式 */
@@ -636,13 +611,14 @@
 
   /* AdaptiveCard 图片样式 */
   :global(.adaptive-card .ac-image) {
-    border-radius: 8px !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+    border-radius: 4px !important;
   }
 
   /* 自定义元素样式增强 */
   :global(.progress-container) {
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
   }
 
   /* GameIcon 相关样式已移除 - 现在只使用 Action.Submit 按钮 */

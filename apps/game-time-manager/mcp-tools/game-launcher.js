@@ -1,4 +1,4 @@
-// Game Launcher MCP Action
+// Game Launcher MCP Tool
 // Handles game launching functionality
 
 const { spawn } = require('child_process');

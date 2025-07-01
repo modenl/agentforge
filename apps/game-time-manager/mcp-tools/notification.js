@@ -1,4 +1,4 @@
-// Notification System MCP Action
+// Notification System MCP Tool
 // Handles notification sending functionality
 
 class NotificationSystem {

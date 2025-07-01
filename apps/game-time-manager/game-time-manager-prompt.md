@@ -17,7 +17,7 @@
 ### 系统架构
 - **状态驱动**：所有功能基于state machine实现
 - **卡片界面**：动态生成global/assist adaptive cards
-- **外部集成**：通过mcp_actions调用系统功能
+- **外部集成**：通过mcp_tools调用系统功能
 
 ## 2. 业务变量定义
 
@@ -147,9 +147,9 @@ interface Variables {
 }
 ```
 
-## 5. 业务MCP动作
+## 5. 业务MCP工具
 
-### 5.1 游戏控制类MCP动作
+### 5.1 游戏控制类MCP工具
 
 ```json
 {"action": "launch_game", "params": {"game_id": "minecraft"}}
@@ -157,7 +157,7 @@ interface Variables {
 {"action": "monitor_game_process", "params": {"game_id": "minecraft"}}
 ```
 
-### 5.2 数据持久化类MCP动作
+### 5.2 数据持久化类MCP工具
 ```json
 {"action": "save_quiz_result", "params": {"correct": true, "question_index": 5}}
 {"action": "update_stats", "params": {"field": "stats_total_questions_answered", "value": 15}}
@@ -208,7 +208,7 @@ const REWARD_TABLE = {
 - 答题正确后，直接在`new_variables`中更新`time_available_game`变量
 - 计算方式：`new_time_available_game = current_time_available_game + reward_minutes`
 - 同时更新统计变量：`stats_total_game_time_earned`增加奖励分钟数
-- **不使用MCP动作**，所有时间奖励都通过变量直接修改
+- **不使用MCP工具**，所有时间奖励都通过变量直接修改
 
 ### 7.3 答题交互格式
 **Message区域输出**：
@@ -232,7 +232,7 @@ const REWARD_TABLE = {
     "global": {"body": [...], "actions": [...]},
     "assist": {"body": [...], "actions": [...]}
   },
-  "mcp_actions": []
+  "mcp_tools": []
 }
 ```
 
@@ -300,7 +300,7 @@ const REWARD_TABLE = {
       ]
     }
   },
-  "mcp_actions": []
+  "mcp_tools": []
 }
 ```
 
@@ -316,7 +316,7 @@ const REWARD_TABLE = {
     "stats_total_game_time_earned": 28  // 原有24 + 2分钟奖励
   },
   "adaptive_card": { /* ... */ },
-  "mcp_actions": []
+  "mcp_tools": []
 }
 ```
 
@@ -338,6 +338,6 @@ const REWARD_TABLE = {
 - **图形准确**：SVG图形必须与题目数据完全匹配
 
 ### 9.2 游戏控制质量  
-- 游戏启动必须通过MCP动作实现
+- 游戏启动必须通过MCP工具实现
 - 进程监控确保游戏变量同步
 - 时间消耗准确记录到相关变量

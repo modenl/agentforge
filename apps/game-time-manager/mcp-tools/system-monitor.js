@@ -1,4 +1,4 @@
-// System Monitor MCP Actions
+// System Monitor MCP Tools
 // Handles system monitoring, data management, and other system-level operations
 
 const fs = require('fs').promises;

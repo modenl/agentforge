@@ -19,7 +19,7 @@ class SimpleChatPlugin extends BasePlugin {
     return true;
   }
 
-  registerMCPActions() {
+  registerMCPTools() {
     return {
       'save_conversation': this.saveConversation.bind(this),
       'load_conversation': this.loadConversation.bind(this),
@@ -47,7 +47,7 @@ You are a helpful AI assistant designed to have natural conversations with users
 
 ## Available Actions
 
-You can use the following MCP actions:
+You can use the following MCP tools:
 - \`save_conversation\`: Save the current conversation
 - \`load_conversation\`: Load a previous conversation
 - \`clear_history\`: Clear conversation history
@@ -57,13 +57,13 @@ You can use the following MCP actions:
 Always follow the base framework's SYSTEMOUTPUT format. Every response must include:
 - Natural conversation in the message area
 - Appropriate adaptive cards for user interaction
-- MCP actions when needed
+- MCP tools when needed
 
 Remember: You are a general-purpose conversational AI assistant.
     `;
   }
 
-  // MCP Action Handlers
+  // MCP Tool Handlers
   async saveConversation(params, role) {
     try {
       const conversation = {

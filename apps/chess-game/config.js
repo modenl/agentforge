@@ -13,7 +13,7 @@ module.exports = {
     defaultHeight: 800,
     minimizeToTray: false,
     resizable: true,
-    enableDevTools: true,  // 启用开发者工具
+    enableDevTools: false,  // 启用开发者工具
     uiPath: path.join(__dirname, '../../framework/renderer/index.html')
   },
 
