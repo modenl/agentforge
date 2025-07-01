@@ -41,3 +41,10 @@ Thumbs.db
 
 # Claude files
 .claude
+
+# E2E test files
+tests/e2e/test-results/
+tests/e2e/playwright-report/
+tests/e2e/test-data/
+tests/e2e/test-logs/
+tests/e2e/.env.test
