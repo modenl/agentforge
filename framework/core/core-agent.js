@@ -54,7 +54,7 @@ class CoreAgent {
       section += `### 服务器: ${server.name}\n`;
       section += `- 应用: ${server.appId}\n`;
       section += `- 工具数量: ${server.tools}\n`;
-      section += `- 支持iframe: ${server.iframeSupported ? '是' : '否'}\n`;
+      section += `- 支持WebView: ${server.webviewSupported ? '是' : '否'}\n`;
       
       // 获取该服务器的具体工具列表
       const tools = mcpManager.getMCPToolsForPrompt().filter(tool => tool.server === server.name);
@@ -341,7 +341,7 @@ class CoreAgent {
           new_variables: this.currentVariables,
           adaptive_card: this.currentAdaptiveCard,
           mcp_tools: [],
-          iframe_config: null
+          webview_config: null
         };
       }
 
@@ -416,7 +416,7 @@ class CoreAgent {
         new_variables: this.currentVariables,
         adaptive_card: processedCard,
         mcp_tools: mcpTools,
-        iframe_config: systemOutput.iframe_config || null
+        webview_config: systemOutput.webview_config || null
       };
 
     } catch (error) {
@@ -496,7 +496,7 @@ class CoreAgent {
       new_variables: this.currentVariables,
       adaptive_card: this.currentAdaptiveCard,
       mcp_tools: [],
-      iframe_config: null
+      webview_config: null
     };
   }
 

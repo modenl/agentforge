@@ -312,7 +312,7 @@ The following external tools are available through the Model Context Protocol:
     },
     {
       "name": "get_embeddable_url",
-      "description": "Get an embeddable URL for iframe integration of the current active game",
+      "description": "Get an embeddable URL for webview integration of the current active game",
       "inputSchema": {
         "type": "object",
         "properties": {

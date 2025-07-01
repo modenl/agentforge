@@ -268,43 +268,9 @@ class MCPClient extends EventEmitter {
       }
     });
 
-    // CRITICAL DEBUG: Log the complete initialization result
-    this.logger.info(`[INIT_DEBUG] ========== MCP SERVER ${this.serverConfig.name} INITIALIZE RESPONSE ==========`);
-    this.logger.info(`[INIT_DEBUG] Full initResult:`, JSON.stringify(initResult, null, 2));
-    this.logger.info(`[INIT_DEBUG] initResult type: ${typeof initResult}`);
-    this.logger.info(`[INIT_DEBUG] initResult keys: ${Object.keys(initResult || {}).join(', ')}`);
-    
-    // Log each top-level field
-    if (initResult) {
-      for (const [key, value] of Object.entries(initResult)) {
-        this.logger.info(`[INIT_DEBUG] initResult.${key}:`, JSON.stringify(value, null, 2));
-      }
-    }
-    
     // Store server capabilities and info
     this.serverCapabilities = initResult.capabilities || {};
     this.serverInfo = initResult.serverInfo || {};
-    
-    // CRITICAL DEBUG: Log the stored capabilities
-    this.logger.info(`[INIT_DEBUG] ========== STORED CAPABILITIES ==========`);
-    this.logger.info(`[INIT_DEBUG] Stored serverCapabilities:`, JSON.stringify(this.serverCapabilities, null, 2));
-    this.logger.info(`[INIT_DEBUG] serverCapabilities type: ${typeof this.serverCapabilities}`);
-    this.logger.info(`[INIT_DEBUG] serverCapabilities keys: ${Object.keys(this.serverCapabilities).join(', ')}`);
-    
-    // Check if capabilities might be at wrong level
-    if (initResult.experimental) {
-      this.logger.warn(`[INIT_DEBUG] WARNING: Found 'experimental' at root level of initResult!`);
-      this.logger.info(`[INIT_DEBUG] Root level experimental:`, JSON.stringify(initResult.experimental, null, 2));
-    }
-    
-    // Log iframe capabilities if present
-    if (this.serverCapabilities?.experimental?.embedding) {
-      this.logger.info(`[IFRAME_DEBUG] MCP server ${this.serverConfig.name} has embedding capabilities:`, 
-        JSON.stringify(this.serverCapabilities.experimental.embedding, null, 2));
-    } else {
-      this.logger.info(`[IFRAME_DEBUG] MCP server ${this.serverConfig.name} does NOT have embedding capabilities`);
-      this.logger.info(`[IFRAME_DEBUG] serverCapabilities.experimental = ${JSON.stringify(this.serverCapabilities.experimental)}`);
-    }
     
     // Validate protocol version
     if (initResult.protocolVersion !== this.protocolVersion) {
@@ -345,31 +311,6 @@ class MCPClient extends EventEmitter {
         await this.discoverPrompts();
       }
 
-      // Check for experimental capabilities
-      this.logger.info(`[CAPABILITY_DISCOVERY] ========== CHECKING EXPERIMENTAL CAPABILITIES ==========`);
-      this.logger.info(`[CAPABILITY_DISCOVERY] Full serverCapabilities:`, JSON.stringify(this.serverCapabilities, null, 2));
-      
-      if (this.serverCapabilities.experimental) {
-        this.logger.info('[CAPABILITY_DISCOVERY] Server has experimental capabilities:', JSON.stringify(this.serverCapabilities.experimental, null, 2));
-        
-        // Check for iframe support
-        if (this.serverCapabilities.experimental.embedding) {
-          this.logger.info('[CAPABILITY_DISCOVERY] Server supports embedding:', JSON.stringify(this.serverCapabilities.experimental.embedding, null, 2));
-          
-          // Check if iframe feature is supported
-          if (this.serverCapabilities.experimental.embedding.features?.includes('iframe')) {
-            this.logger.info('[CAPABILITY_DISCOVERY] ✓ Server supports iframe embedding');
-          } else {
-            this.logger.info('[CAPABILITY_DISCOVERY] ✗ Server does NOT support iframe embedding');
-            this.logger.info('[CAPABILITY_DISCOVERY] Available features:', JSON.stringify(this.serverCapabilities.experimental.embedding.features || []));
-          }
-        } else {
-          this.logger.info('[CAPABILITY_DISCOVERY] ✗ No embedding capability found in experimental');
-        }
-      } else {
-        this.logger.info('[CAPABILITY_DISCOVERY] ✗ No experimental capabilities found');
-        this.logger.info('[CAPABILITY_DISCOVERY] Available capability keys:', Object.keys(this.serverCapabilities).join(', '));
-      }
 
       this.logger.info(`Capability discovery completed: ${this.tools.size} tools, ${this.resources.size} resources, ${this.prompts.size} prompts`);
       
@@ -527,37 +468,28 @@ class MCPClient extends EventEmitter {
   }
 
   /**
-   * Check if server supports iframe embedding
+   * Check if server supports webview embedding
    */
-  supportsIframeEmbedding() {
-    // DEBUG: Log the check process
-    this.logger.debug(`[IFRAME_CHECK] Checking iframe support for ${this.serverConfig.name}`);
-    this.logger.debug(`[IFRAME_CHECK] serverCapabilities:`, JSON.stringify(this.serverCapabilities, null, 2));
-    
-    const hasExperimental = !!this.serverCapabilities?.experimental;
-    const hasEmbedding = !!this.serverCapabilities?.experimental?.embedding;
-    const hasFeatures = !!this.serverCapabilities?.experimental?.embedding?.features;
-    const features = this.serverCapabilities?.experimental?.embedding?.features || [];
-    const hasIframe = features.includes('iframe');
-    
-    this.logger.info(`[IFRAME_CHECK] ${this.serverConfig.name} - hasExperimental: ${hasExperimental}, hasEmbedding: ${hasEmbedding}, hasFeatures: ${hasFeatures}, features: ${JSON.stringify(features)}, hasIframe: ${hasIframe}`);
-    
-    return hasIframe;
+  supportsWebviewEmbedding() {
+    // Simply check if the server has get_embeddable_url tool
+    const hasEmbeddableUrlTool = this.tools.has('get_embeddable_url');
+    this.logger.debug(`[WEBVIEW_CHECK] ${this.serverConfig.name} has get_embeddable_url tool: ${hasEmbeddableUrlTool}`);
+    return hasEmbeddableUrlTool;
   }
 
   /**
-   * Get iframe configuration if supported
+   * Get webview configuration if supported
    */
-  getIframeConfig() {
-    if (!this.supportsIframeEmbedding()) {
+  getWebviewConfig() {
+    if (!this.supportsWebviewEmbedding()) {
       return null;
     }
     
     return {
       supported: true,
-      features: this.serverCapabilities.experimental.embedding.features,
-      version: this.serverCapabilities.experimental.embedding.version || '1.0.0',
-      postMessageSupported: this.serverCapabilities.experimental.embedding.features?.includes('postMessage') || false,
+      features: ['webview'],
+      version: '1.0.0',
+      postMessageSupported: false,
       // Note: actual URL must be obtained by calling get_embeddable_url tool
       requiresUrlCall: true
     };
@@ -568,8 +500,8 @@ class MCPClient extends EventEmitter {
    * This calls the get_embeddable_url tool on the MCP server
    */
   async getEmbeddableUrl(params = {}) {
-    if (!this.supportsIframeEmbedding()) {
-      throw new Error('Server does not support iframe embedding');
+    if (!this.supportsWebviewEmbedding()) {
+      throw new Error('Server does not support webview embedding');
     }
     
     // Check if server has get_embeddable_url tool
@@ -626,17 +558,13 @@ class MCPClient extends EventEmitter {
    * Get server information
    */
   getServerInfo() {
-    // DEBUG: Log full capabilities when getting server info
-    this.logger.debug(`[SERVER_INFO_DEBUG] Getting server info for ${this.serverConfig.name}`);
-    this.logger.debug(`[SERVER_INFO_DEBUG] Full capabilities:`, JSON.stringify(this.serverCapabilities, null, 2));
-    
     return {
       name: this.serverConfig.name,
       connected: this.connected,
       initialized: this.initialized,
       serverInfo: this.serverInfo,
       capabilities: this.serverCapabilities,
-      iframeSupported: this.supportsIframeEmbedding(),
+      webviewSupported: this.supportsWebviewEmbedding(),
       tools: Array.from(this.tools.entries()).map(([name, def]) => ({
         name,
         description: def.description,

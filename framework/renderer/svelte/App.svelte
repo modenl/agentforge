@@ -152,14 +152,14 @@
     if (!electronAPI) return;
     
     // 监听MCP服务器准备就绪事件
-    electronAPI.onMCPServerIframeReady((data) => {
+    electronAPI.onMCPServerWebviewReady((data) => {
       console.log('🎯 [MCP VIEW EVENT] MCP server ready!');
       console.log('📦 Full event data:', JSON.stringify(data, null, 2));
-      console.log('🔧 Config:', JSON.stringify(data.iframeConfig, null, 2));
+      console.log('🔧 Config:', JSON.stringify(data.webviewConfig, null, 2));
       
-      if (data.iframeConfig) {
-        if (data.iframeConfig.url) {
-          const newUrl = data.iframeConfig.url;
+      if (data.webviewConfig) {
+        if (data.webviewConfig.url) {
+          const newUrl = data.webviewConfig.url;
           
           // Only accept URLs from MCP servers (not fallback URLs)
           if (newUrl.startsWith('http://localhost:3000')) {
@@ -169,20 +169,20 @@
           
           console.log('✅ [MCP VIEW] Setting MCP view state:');
           console.log('   URL:', newUrl);
-          console.log('   Title:', data.iframeConfig.title || data.serverName);
+          console.log('   Title:', data.webviewConfig.title || data.serverName);
           console.log('   Server:', data.serverName);
           
           showMCPView = true;
           mcpUrl = newUrl;
-          mcpTitle = data.iframeConfig.title || data.serverName;
+          mcpTitle = data.webviewConfig.title || data.serverName;
           mcpServerName = data.serverName;
           hasReceivedMCPUrl = true;
           
           // 右侧面板现在总是显示
           
           // 根据不同场景设置视图模式
-          if (data.iframeConfig.preferredMode) {
-            mcpViewMode = data.iframeConfig.preferredMode;
+          if (data.webviewConfig.preferredMode) {
+            mcpViewMode = data.webviewConfig.preferredMode;
           } else {
             // 默认使用 compact mode
             mcpViewMode = 'compact';
@@ -202,7 +202,7 @@
           }, 100);
         } else {
           console.error('❌ [MCP VIEW] No URL in config!');
-          console.error('   Config:', data.iframeConfig);
+          console.error('   Config:', data.webviewConfig);
         }
       } else {
         console.error('❌ [MCP VIEW] No config in event data!');

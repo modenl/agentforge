@@ -271,13 +271,13 @@ class AppManager {
     logger.info('MCP Manager initialized');
     
     // Listen for MCP Manager events and forward to renderer
-    this.mcpManager.on('server-iframe-available', (data) => {
+    this.mcpManager.on('server-webview-available', (data) => {
       logger.info('MCP server UI available:', data);
       // Forward to all renderer windows
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send('mcp:server-iframe-ready', {
+        this.mainWindow.webContents.send('mcp:server-webview-ready', {
           serverName: data.serverName,
-          iframeConfig: data.config
+          webviewConfig: data.config
         });
       }
     });
@@ -433,15 +433,15 @@ class AppManager {
           // 特殊处理：如果MCP结果包含SVG，直接插入到消息中
           this.injectMCPResultsIntoAIResponse(response, mcpResults);
           
-          // 检查MCP结果中是否有iframe_config
+          // 检查MCP结果中是否有webview_config
           for (const mcpResult of mcpResults) {
-            if (mcpResult.success && mcpResult.result && mcpResult.result.iframe_config) {
-              logger.info('Found iframe_config in MCP result:', mcpResult.result.iframe_config);
-              // 如果AI没有提供iframe_config，使用MCP工具返回的
-              if (!response.iframe_config) {
-                response.iframe_config = mcpResult.result.iframe_config;
+            if (mcpResult.success && mcpResult.result && mcpResult.result.webview_config) {
+              logger.info('Found webview_config in MCP result:', mcpResult.result.webview_config);
+              // 如果AI没有提供webview_config，使用MCP工具返回的
+              if (!response.webview_config) {
+                response.webview_config = mcpResult.result.webview_config;
               }
-              break; // 只使用第一个iframe_config
+              break; // 只使用第一个webview_config
             }
           }
         }
@@ -471,15 +471,15 @@ class AppManager {
           // 特殊处理：如果MCP结果包含SVG，直接插入到消息中
           this.injectMCPResultsIntoAIResponse(response, mcpResults);
           
-          // 检查MCP结果中是否有iframe_config
+          // 检查MCP结果中是否有webview_config
           for (const mcpResult of mcpResults) {
-            if (mcpResult.success && mcpResult.result && mcpResult.result.iframe_config) {
-              logger.info('Found iframe_config in MCP result:', mcpResult.result.iframe_config);
-              // 如果AI没有提供iframe_config，使用MCP工具返回的
-              if (!response.iframe_config) {
-                response.iframe_config = mcpResult.result.iframe_config;
+            if (mcpResult.success && mcpResult.result && mcpResult.result.webview_config) {
+              logger.info('Found webview_config in MCP result:', mcpResult.result.webview_config);
+              // 如果AI没有提供webview_config，使用MCP工具返回的
+              if (!response.webview_config) {
+                response.webview_config = mcpResult.result.webview_config;
               }
-              break; // 只使用第一个iframe_config
+              break; // 只使用第一个webview_config
             }
           }
         }
@@ -509,28 +509,28 @@ class AppManager {
       }
     });
     
-    // Get iframe configuration for a server
-    ipcMain.handle('mcp:getServerIframeConfig', async(event, serverName) => {
+    // Get webview configuration for a server
+    ipcMain.handle('mcp:getServerWebviewConfig', async(event, serverName) => {
       try {
         if (!this.mcpManager || !this.mcpManager.isReady()) {
           return null;
         }
-        return this.mcpManager.getServerIframeConfig(serverName);
+        return this.mcpManager.getServerWebviewConfig(serverName);
       } catch (error) {
-        logger.error('Failed to get server iframe config:', error);
+        logger.error('Failed to get server webview config:', error);
         return null;
       }
     });
     
-    // Get all iframe-capable servers
-    ipcMain.handle('mcp:getIframeCapableServers', async() => {
+    // Get all webview-capable servers
+    ipcMain.handle('mcp:getWebviewCapableServers', async() => {
       try {
         if (!this.mcpManager || !this.mcpManager.isReady()) {
           return [];
         }
-        return this.mcpManager.getIframeCapableServers();
+        return this.mcpManager.getWebviewCapableServers();
       } catch (error) {
-        logger.error('Failed to get iframe capable servers:', error);
+        logger.error('Failed to get webview capable servers:', error);
         return [];
       }
     });
@@ -543,11 +543,11 @@ class AppManager {
         }
         const result = await this.mcpManager.startServer(serverName);
         
-        // If server has iframe capability, notify renderer
-        if (result.success && result.iframeConfig) {
-          event.sender.send('mcp:server-iframe-ready', {
+        // If server has webview capability, notify renderer
+        if (result.success && result.webviewConfig) {
+          event.sender.send('mcp:server-webview-ready', {
             serverName,
-            iframeConfig: result.iframeConfig
+            webviewConfig: result.webviewConfig
           });
         }
         

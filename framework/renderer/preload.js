@@ -83,16 +83,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mcpExecute: (action) => ipcRenderer.invoke('mcp:execute', action),
   
   // MCP WebView相关API
-  getServerIframeConfig: (serverName) => ipcRenderer.invoke('mcp:getServerIframeConfig', serverName),
-  getIframeCapableServers: () => ipcRenderer.invoke('mcp:getIframeCapableServers'),
+  getServerWebviewConfig: (serverName) => ipcRenderer.invoke('mcp:getServerWebviewConfig', serverName),
+  getWebviewCapableServers: () => ipcRenderer.invoke('mcp:getWebviewCapableServers'),
   
   // MCP服务器控制API
   startMCPServer: (serverName) => ipcRenderer.invoke('mcp:startServer', serverName),
   stopMCPServer: (serverName) => ipcRenderer.invoke('mcp:stopServer', serverName),
   
   // MCP服务器事件监听
-  onMCPServerIframeReady: (callback) => {
-    ipcRenderer.on('mcp:server-iframe-ready', (event, data) => callback(data));
+  onMCPServerWebviewReady: (callback) => {
+    ipcRenderer.on('mcp:server-webview-ready', (event, data) => callback(data));
   },
   onMCPServerStopped: (callback) => {
     ipcRenderer.on('mcp:server-stopped', (event, data) => callback(data));
