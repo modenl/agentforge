@@ -519,10 +519,25 @@ class MCPClient extends EventEmitter {
         // MCP returns content as an array of {type, text} objects
         const textContent = result.content.find(item => item.type === 'text');
         if (textContent && textContent.text) {
-          // Extract URL from the text content
-          const urlMatch = textContent.text.match(/Embed URL:\s*\n(.+?)(?:\n|$)/);
+          this.logger.debug('Extracting URL from text:', textContent.text);
+          
+          // Extract URL from the text content - try multiple patterns
+          // Pattern 1: 🔗 URL: (with possible whitespace/newlines)
+          let urlMatch = textContent.text.match(/🔗\s*URL:\s*([^\n]+)/);
+          if (!urlMatch) {
+            // Pattern 2: Just URL: (with possible whitespace/newlines) 
+            urlMatch = textContent.text.match(/URL:\s*([^\n]+)/);
+          }
+          if (!urlMatch) {
+            // Pattern 3: Look for any http/https URL
+            urlMatch = textContent.text.match(/(https?:\/\/[^\s\n]+)/);
+          }
+          
           if (urlMatch) {
             extractedData.url = urlMatch[1].trim();
+            this.logger.debug('Extracted URL:', extractedData.url);
+          } else {
+            this.logger.debug('No URL match found');
           }
           
           // Extract title if present
