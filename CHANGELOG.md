@@ -1,5 +1,14 @@
 # AgentForge 更新日志
 
+## 2025-07-01 更新 (v3)
+
+### 移除 experimental 配置依赖
+- **移除了 experimental.embedding 配置依赖**：
+  - 框架现在完全依赖 `get_embeddable_url` 工具的存在来检测 WebView 支持
+  - 简化了 MCP 配置文件，不再需要 experimental 部分
+  - 更新了所有相关文档和示例
+  - 保持了向后兼容性，仅通过工具发现来启用功能
+
 ## 2025-07-01 更新 (v2)
 
 ### MCP WebView 支持简化

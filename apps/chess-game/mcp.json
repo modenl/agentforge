@@ -3,14 +3,7 @@
     "chess-trainer-mcp": {
       "transportType": "stdio",
       "command": "node",
-      "args": ["~/work/agentwork/stockfishmcp/bin/mcp"],
-      "experimental": {
-        "embedding": {
-          "enabled": true,
-          "features": ["iframe"],
-          "port": 3456
-        }
-      }
+      "args": ["../stockfishmcp/bin/mcp"]
     }
   }
 } 
