@@ -217,6 +217,12 @@ class AIClientFactory {
    * @returns {AIClientWrapper} AI客户端包装器实例
    */
   static createClient(model) {
+    // Support test environment model override
+    if (process.env.NODE_ENV === 'test' && process.env.OPENAI_MODEL) {
+      logger.info(`Test environment: overriding model ${model} with ${process.env.OPENAI_MODEL}`);
+      model = process.env.OPENAI_MODEL;
+    }
+    
     logger.info(`Creating AI client for model: ${model}`);
 
     let baseClient;
