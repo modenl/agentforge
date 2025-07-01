@@ -519,32 +519,10 @@ class MCPClient extends EventEmitter {
         // MCP returns content as an array of {type, text} objects
         const textContent = result.content.find(item => item.type === 'text');
         if (textContent && textContent.text) {
-          this.logger.debug('Extracting URL from text:', textContent.text);
-          
-          // Extract URL from the text content - try multiple patterns
-          // Pattern 1: 🔗 URL: (with possible whitespace/newlines)
-          let urlMatch = textContent.text.match(/🔗\s*URL:\s*([^\n]+)/);
-          if (!urlMatch) {
-            // Pattern 2: Just URL: (with possible whitespace/newlines) 
-            urlMatch = textContent.text.match(/URL:\s*([^\n]+)/);
-          }
-          if (!urlMatch) {
-            // Pattern 3: Look for any http/https URL
-            urlMatch = textContent.text.match(/(https?:\/\/[^\s\n]+)/);
-          }
-          
-          if (urlMatch) {
-            extractedData.url = urlMatch[1].trim();
-            this.logger.debug('Extracted URL:', extractedData.url);
-          } else {
-            this.logger.debug('No URL match found');
-          }
-          
-          // Extract title if present
-          const titleMatch = textContent.text.match(/Game ID:\s*(.+?)(?:\n|$)/);
-          if (titleMatch) {
-            extractedData.title = `Chess Game: ${titleMatch[1].trim()}`;
-          }
+          // Text is now just the URL directly
+          extractedData.url = textContent.text.trim();
+          extractedData.title = 'Chess Game';
+          this.logger.debug('Got URL directly:', extractedData.url);
         }
         
         // Check if there's structured data in the response

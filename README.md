@@ -76,7 +76,7 @@ if (user.role === 'admin' && time > workHours) {
 - **副作用隔离**: 所有系统交互（文件操作、网络请求、UI生成）通过MCP工具执行
 - **动态加载**: MCP服务器按需启动，支持延迟加载和状态机管理
 - **工具命名空间**: 工具自动添加服务器前缀 `mcp_servername_toolname`
-- **UI扩展能力**: MCP服务器可以提供独立的iframe UI，无缝集成到主界面
+- **UI扩展能力**: MCP服务器可以提供独立的WebView UI，无缝集成到主界面
 
 ```javascript
 // MCP工具配置示例 (mcp.json)
@@ -88,7 +88,7 @@ if (user.role === 'admin' && time > workHours) {
       "experimental": {
         "embedding": {
           "enabled": true,
-          "features": ["iframe"],
+          "features": ["webview"],
           "port": 3456
         }
       }
@@ -185,7 +185,7 @@ AgentForge 引入了两个突破性的GUI概念，彻底改变了传统的用户
   "experimental": {
     "embedding": {
       "enabled": true,
-      "features": ["iframe"],  // 保持向后兼容
+      "features": ["webview"],  // 保持向后兼容
       "port": 3456  // UI服务端口
     }
   }
@@ -484,7 +484,7 @@ module.exports = {
       "experimental": {
         "embedding": {
           "enabled": true,
-          "features": ["iframe"],
+          "features": ["webview"],
           "port": 3457
         }
       }
