@@ -18,7 +18,13 @@ const logger = require('./logger');
  */
 class AppManager {
   constructor(config = {}) {
+    console.log('[AppManager] Constructor received config:', JSON.stringify(config, null, 2));
+    
+    // First preserve the original config values
+    const originalAppName = config.appName;
+    
     this.config = {
+      ...config,  // Spread config first to get all properties
       window: {
         defaultWidth: 1200,
         defaultHeight: 800,
@@ -29,9 +35,17 @@ class AppManager {
       },
       plugins: config.plugins || [],
       enableAutoLaunch: config.enableAutoLaunch !== false,
-      supabase: config.supabase || {},
-      ...config
+      supabase: config.supabase || {}
     };
+    
+    // Ensure appName is preserved
+    if (originalAppName) {
+      this.config.appName = originalAppName;
+    } else if (!this.config.appName) {
+      this.config.appName = 'Framework App';
+    }
+    
+    console.log('[AppManager] Final config.appName:', this.config.appName);
 
     this.mainWindow = null;
     this.tray = null;
@@ -47,6 +61,26 @@ class AppManager {
       systemReady: false,
       pluginsLoaded: false
     };
+  }
+
+  /**
+   * Clear WebView cache
+   * Clears both default session and MCP partition caches
+   */
+  async clearWebViewCache() {
+    try {
+      const { session } = require('electron');
+      // Clear default session cache
+      await session.defaultSession.clearCache();
+      // Clear MCP partition cache
+      const mcpSession = session.fromPartition('persist:mcp');
+      await mcpSession.clearCache();
+      logger.info('WebView cache cleared');
+      return { success: true };
+    } catch (error) {
+      logger.error('Failed to clear WebView cache:', error);
+      return { success: false, error: error.message };
+    }
   }
 
   /**
@@ -68,8 +102,8 @@ class AppManager {
     // Load and initialize plugins
     await this.loadPlugins();
 
-    // Connect to external MCP servers
-    await this.connectExternalMCPServers();
+    // Register MCP server configurations (but don't connect yet)
+    await this.registerMCPServerConfigs();
 
     // Initialize remaining services (Core Agent, etc.)
     await this.initializeServices();
@@ -151,10 +185,10 @@ class AppManager {
         // Initialize the plugin
         await plugin.initialize();
 
-        // Register plugin MCP actions
-        const mcpActions = plugin.registerMCPActions();
-        if (mcpActions && typeof mcpActions === 'object') {
-          this.registerPluginMCPActions(pluginId, mcpActions);
+        // Register plugin MCP tools
+        const mcpTools = plugin.registerMCPTools();
+        if (mcpTools && typeof mcpTools === 'object') {
+          this.registerPluginMCPTools(pluginId, mcpTools);
         }
 
         this.plugins.set(pluginId, plugin);
@@ -195,27 +229,27 @@ class AppManager {
   }
 
   /**
-   * Register MCP actions from a plugin
+   * Register MCP tools from a plugin
    */
-  registerPluginMCPActions(pluginId, actions) {
+  registerPluginMCPTools(pluginId, tools) {
     if (!this.mcpManager || !this.mcpManager.isReady()) {
-      logger.warn(`Cannot register MCP actions for ${pluginId}: MCP Manager not ready`);
+      logger.warn(`Cannot register MCP tools for ${pluginId}: MCP Manager not ready`);
       return;
     }
 
-    logger.info(`Registering MCP actions for plugin ${pluginId}: ${Object.keys(actions)}`);
+    logger.info(`Registering MCP tools for plugin ${pluginId}: ${Object.keys(tools)}`);
 
-    for (const [actionName, handler] of Object.entries(actions)) {
-      logger.info(`Registering MCP action: ${actionName} for plugin ${pluginId}`);
-      this.mcpManager.registerMCPAction(actionName, handler, pluginId);
+    for (const [toolName, handler] of Object.entries(tools)) {
+      logger.info(`Registering MCP tool: ${toolName} for plugin ${pluginId}`);
+      this.mcpManager.registerMCPTool(toolName, handler, pluginId);
     }
     
-    logger.info(`Completed registering ${Object.keys(actions).length} MCP actions for plugin ${pluginId}`);
+    logger.info(`Completed registering ${Object.keys(tools).length} MCP tools for plugin ${pluginId}`);
   }
 
   /**
    * Initialize MCP Manager
-   * This must be done before loading plugins so that MCP actions can be registered
+   * This must be done before loading plugins so that MCP tools can be registered
    */
   async initializeMCPManager() {
     // Initialize Supabase client if configured
@@ -235,10 +269,58 @@ class AppManager {
     this.mcpManager = new MCPManager(logger);
     await this.mcpManager.initialize(this.supabaseClient);
     logger.info('MCP Manager initialized');
+    
+    // Listen for MCP Manager events and forward to renderer
+    this.mcpManager.on('server-iframe-available', (data) => {
+      logger.info('MCP server UI available:', data);
+      // Forward to all renderer windows
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('mcp:server-iframe-ready', {
+          serverName: data.serverName,
+          iframeConfig: data.config
+        });
+      }
+    });
+    
+    this.mcpManager.on('server-stopped', (data) => {
+      logger.info('MCP server stopped:', data);
+      // Forward to all renderer windows
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('mcp:server-stopped', data);
+      }
+    });
+  }
+
+  /**
+   * Register MCP server configurations without connecting
+   */
+  async registerMCPServerConfigs() {
+    logger.info('Registering MCP server configurations...');
+    
+    if (!this.mcpManager || !this.mcpManager.isReady()) {
+      logger.warn('MCP Manager not ready, skipping MCP server registration');
+      return;
+    }
+    
+    // Register MCP server configurations from framework config
+    if (this.config.mcpServers && typeof this.config.mcpServers === 'object') {
+      this.mcpManager.registerServerConfigs('framework', this.config.mcpServers);
+    }
+    
+    // Register MCP server configurations from plugin configs
+    for (const plugin of this.plugins.values()) {
+      const pluginId = plugin.id || plugin.constructor.name;
+      if (plugin.config && plugin.config.mcpServers && typeof plugin.config.mcpServers === 'object') {
+        this.mcpManager.registerServerConfigs(pluginId, plugin.config.mcpServers);
+      }
+    }
+    
+    logger.info(`Registered ${this.mcpManager.serverConfigs.size} MCP server configurations`);
   }
 
   /**
    * Connect to external MCP servers from application configurations
+   * @deprecated Use lazy loading instead - servers connect on first use
    */
   async connectExternalMCPServers() {
     logger.info('Registering and connecting to external MCP servers...');
@@ -342,14 +424,26 @@ class AppManager {
 
         logger.info(`Processing completed in ${duration}ms`);
 
-        // Execute MCP actions if any
-        if (response.mcp_actions && response.mcp_actions.length > 0) {
-          const mcpResults = await this.executeMCPActions(response.mcp_actions);
+        // Execute MCP tools if any
+        if (response.mcp_tools && response.mcp_tools.length > 0) {
+          const mcpResults = await this.executeMCPTools(response.mcp_tools);
           response.mcp_results = mcpResults;
           response.new_variables = this.coreAgent.getCurrentVariables();
           
           // 特殊处理：如果MCP结果包含SVG，直接插入到消息中
           this.injectMCPResultsIntoAIResponse(response, mcpResults);
+          
+          // 检查MCP结果中是否有iframe_config
+          for (const mcpResult of mcpResults) {
+            if (mcpResult.success && mcpResult.result && mcpResult.result.iframe_config) {
+              logger.info('Found iframe_config in MCP result:', mcpResult.result.iframe_config);
+              // 如果AI没有提供iframe_config，使用MCP工具返回的
+              if (!response.iframe_config) {
+                response.iframe_config = mcpResult.result.iframe_config;
+              }
+              break; // 只使用第一个iframe_config
+            }
+          }
         }
 
         return response;
@@ -368,14 +462,26 @@ class AppManager {
 
         const response = await this.coreAgent.processInputStreaming(userInput, context, streamCallback);
 
-        // Execute MCP actions if any
-        if (response.mcp_actions && response.mcp_actions.length > 0) {
-          const mcpResults = await this.executeMCPActions(response.mcp_actions);
+        // Execute MCP tools if any
+        if (response.mcp_tools && response.mcp_tools.length > 0) {
+          const mcpResults = await this.executeMCPTools(response.mcp_tools);
           response.mcp_results = mcpResults;
           response.new_variables = this.coreAgent.getCurrentVariables();
           
           // 特殊处理：如果MCP结果包含SVG，直接插入到消息中
           this.injectMCPResultsIntoAIResponse(response, mcpResults);
+          
+          // 检查MCP结果中是否有iframe_config
+          for (const mcpResult of mcpResults) {
+            if (mcpResult.success && mcpResult.result && mcpResult.result.iframe_config) {
+              logger.info('Found iframe_config in MCP result:', mcpResult.result.iframe_config);
+              // 如果AI没有提供iframe_config，使用MCP工具返回的
+              if (!response.iframe_config) {
+                response.iframe_config = mcpResult.result.iframe_config;
+              }
+              break; // 只使用第一个iframe_config
+            }
+          }
         }
 
         return response;
@@ -402,68 +508,152 @@ class AppManager {
         return { agent_state: null, timestamp: new Date().toISOString() };
       }
     });
+    
+    // Get iframe configuration for a server
+    ipcMain.handle('mcp:getServerIframeConfig', async(event, serverName) => {
+      try {
+        if (!this.mcpManager || !this.mcpManager.isReady()) {
+          return null;
+        }
+        return this.mcpManager.getServerIframeConfig(serverName);
+      } catch (error) {
+        logger.error('Failed to get server iframe config:', error);
+        return null;
+      }
+    });
+    
+    // Get all iframe-capable servers
+    ipcMain.handle('mcp:getIframeCapableServers', async() => {
+      try {
+        if (!this.mcpManager || !this.mcpManager.isReady()) {
+          return [];
+        }
+        return this.mcpManager.getIframeCapableServers();
+      } catch (error) {
+        logger.error('Failed to get iframe capable servers:', error);
+        return [];
+      }
+    });
+    
+    // Start a specific MCP server
+    ipcMain.handle('mcp:startServer', async(event, serverName) => {
+      try {
+        if (!this.mcpManager || !this.mcpManager.isReady()) {
+          return { success: false, error: 'MCP Manager not ready' };
+        }
+        const result = await this.mcpManager.startServer(serverName);
+        
+        // If server has iframe capability, notify renderer
+        if (result.success && result.iframeConfig) {
+          event.sender.send('mcp:server-iframe-ready', {
+            serverName,
+            iframeConfig: result.iframeConfig
+          });
+        }
+        
+        return result;
+      } catch (error) {
+        logger.error('Failed to start MCP server:', error);
+        return { success: false, error: error.message };
+      }
+    });
+    
+    // Stop a specific MCP server
+    ipcMain.handle('mcp:stopServer', async(event, serverName) => {
+      try {
+        if (!this.mcpManager || !this.mcpManager.isReady()) {
+          return { success: false, error: 'MCP Manager not ready' };
+        }
+        const result = await this.mcpManager.stopServer(serverName);
+        
+        // Notify renderer to close iframe if exists
+        if (result.success) {
+          event.sender.send('mcp:server-stopped', { serverName });
+        }
+        
+        return result;
+      } catch (error) {
+        logger.error('Failed to stop MCP server:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    // Clear WebView cache handler
+    ipcMain.handle('webview:clearCache', async(event) => {
+      return await this.clearWebViewCache();
+    });
+    
+    // Set window title handler
+    ipcMain.handle('window:setTitle', async(event, title) => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.setTitle(title);
+        logger.info(`Window title set to: ${title}`);
+        return true;
+      }
+      return false;
+    });
 
     logger.info('IPC handlers set up');
   }
 
   /**
-   * Execute MCP actions
+   * Execute MCP tools
    */
-  async executeMCPActions(actions) {
+  async executeMCPTools(tools) {
     const results = [];
     
     if (!this.mcpManager || !this.mcpManager.isReady()) {
-      logger.warn('MCP Manager not ready, skipping MCP actions');
+      logger.warn('MCP Manager not ready, skipping MCP tools');
       return results;
     }
 
-    // Debug: List all registered actions
-    const registeredActions = this.mcpManager.mcpExecutor.getRegisteredActions();
-    logger.info(`All registered MCP actions (${registeredActions.length}): ${registeredActions.join(', ')}`);
+    // Debug: List all registered tools
+    const registeredTools = this.mcpManager.mcpExecutor.getRegisteredActions();
+    logger.info(`All registered MCP tools (${registeredTools.length}): ${registeredTools.join(', ')}`);
     
-    // Filter out invalid actions and log details
-    const validActions = [];
-    const invalidActions = [];
+    // Filter out invalid tools and log details
+    const validTools = [];
+    const invalidTools = [];
     
-    for (let i = 0; i < actions.length; i++) {
-      const action = actions[i];
-      if (!action || typeof action !== 'object') {
-        invalidActions.push({ index: i, reason: 'not an object', action });
+    for (let i = 0; i < tools.length; i++) {
+      const tool = tools[i];
+      if (!tool || typeof tool !== 'object') {
+        invalidTools.push({ index: i, reason: 'not an object', tool });
         continue;
       }
-      if (!action.action || typeof action.action !== 'string') {
-        invalidActions.push({ index: i, reason: 'invalid action field', action });
+      if (!tool.action || typeof tool.action !== 'string') {
+        invalidTools.push({ index: i, reason: 'invalid action field', tool });
         continue;
       }
-      validActions.push(action);
+      validTools.push(tool);
     }
     
-    if (invalidActions.length > 0) {
-      logger.warn(`Found ${invalidActions.length} invalid actions:`);
-      invalidActions.forEach(({ index, reason, action }) => {
-        logger.warn(`  Action ${index}: ${reason} - ${JSON.stringify(action)}`);
+    if (invalidTools.length > 0) {
+      logger.warn(`Found ${invalidTools.length} invalid tools:`);
+      invalidTools.forEach(({ index, reason, tool }) => {
+        logger.warn(`  Tool ${index}: ${reason} - ${JSON.stringify(tool)}`);
       });
     }
     
-    logger.info(`Processing ${validActions.length} valid actions out of ${actions.length} total actions`);
+    logger.info(`Processing ${validTools.length} valid tools out of ${tools.length} total tools`);
     
-    for (const action of validActions) {
+    for (const tool of validTools) {
       try {
-        logger.info(`Attempting to execute MCP action: ${action.action}`);
-        const result = await this.mcpManager.executeMCPAction(action.action, action.parameters || action.params, action.role || 'Agent');
+        logger.info(`Attempting to execute MCP tool: ${tool.action}`);
+        const result = await this.mcpManager.executeMCPTool(tool.action, tool.parameters || tool.params, tool.role || 'Agent');
         results.push({
-          action: action.action,
+          action: tool.action,
           success: true,
           result: result
         });
         
         // Log the result for debugging
-        logger.info(`MCP action ${action.action} completed successfully`);
+        logger.info(`MCP tool ${tool.action} completed successfully`);
         
       } catch (error) {
-        logger.error(`MCP action failed: ${action.action}`, error);
+        logger.error(`MCP tool failed: ${tool.action}`, error);
         results.push({
-          action: action.action,
+          action: tool.action,
           success: false,
           error: error.message
         });
@@ -530,7 +720,11 @@ class AppManager {
       return null;
     }
 
+    // Determine if we're in development mode
+    const isDev = process.env.NODE_ENV === 'development' || process.env.DEV_MODE === 'true';
+    
     logger.info('Starting to create main window...');
+    logger.info('Creating window with title:', this.config.appName);
 
     this.mainWindow = new BrowserWindow({
       title: this.config.appName || 'Framework App',
@@ -541,7 +735,10 @@ class AppManager {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        preload: path.join(__dirname, '../renderer/preload.js')
+        preload: path.join(__dirname, '../renderer/preload.js'),
+        webviewTag: true, // Enable webview tag for MCP View
+        // Enable dev tools in dev mode
+        devTools: isDev || this.config.window.enableDevTools !== false
       },
       show: true,
       icon: this.config.window.icon
@@ -550,7 +747,6 @@ class AppManager {
     logger.info('BrowserWindow created, preparing to load UI...');
 
     // Load the application UI
-    const isDev = process.env.NODE_ENV === 'development';
     let uiPath = this.config.window.uiPath ||
       (isDev ? 'http://localhost:3000' : path.join(__dirname, '../renderer/index.html'));
 
@@ -577,13 +773,15 @@ class AppManager {
       logger.info('UI loaded successfully');
       
       // Set the correct window title after UI loads
-      this.mainWindow.setTitle(this.config.appName || 'Framework App');
-      logger.info(`Window title set to: ${this.config.appName || 'Framework App'}`);
+      logger.info(`About to set window title. this.config.appName = "${this.config.appName}"`);
+      const titleToSet = this.config.appName || 'Framework App';
+      this.mainWindow.setTitle(titleToSet);
+      logger.info(`Window title set to: ${titleToSet}`);
       
-      // Open DevTools if enabled
+      // Open DevTools if explicitly enabled
       if (this.config.window.enableDevTools) {
         this.mainWindow.webContents.openDevTools();
-        logger.info('DevTools opened');
+        logger.info('DevTools opened (explicitly enabled)');
       }
       
       // Set app name in the renderer process
@@ -598,9 +796,12 @@ class AppManager {
       throw error;
     }
 
+    // 立即最大化窗口
+    this.mainWindow.maximize();
+    logger.info('Window maximized');
+    
     this.mainWindow.once('ready-to-show', () => {
       logger.info('Window is ready to show');
-      this.mainWindow.show();
     });
 
     // Add error event listeners

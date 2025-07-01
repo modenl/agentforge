@@ -15,7 +15,7 @@
 ## 🔧 Available MCP Tools
 
 The following external tools are available through the Model Context Protocol:
-
+```json
 {
   "tools": [
     {
@@ -387,8 +387,7 @@ The following external tools are available through the Model Context Protocol:
     }
   ]
 }
-
-
+```
 ## 1. 项目介绍
 
 ### 项目定位

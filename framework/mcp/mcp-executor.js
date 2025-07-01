@@ -6,20 +6,28 @@ const MCPClient = require('./mcp-client');
 
 /**
  * Base MCP Executor class
- * Provides framework for executing MCP actions with permission control and validation
+ * Provides framework for executing MCP tools with permission control and validation
  */
 class MCPExecutor extends EventEmitter {
-  constructor(supabaseClient, logger) {
+  constructor(supabaseClient, logger, mcpManager = null) {
     super();
     this.supabase = supabaseClient;
     this.logger = logger;
+    this.mcpManager = mcpManager; // Reference to MCP Manager for lazy loading
     this.registeredActions = new Map();
     this.pluginActions = new Map(); // Map of plugin -> actions
     this.mcpClients = new Map(); // Map of external MCP clients
   }
+  
+  /**
+   * Set MCP Manager reference (for circular dependency resolution)
+   */
+  setMCPManager(mcpManager) {
+    this.mcpManager = mcpManager;
+  }
 
   /**
-   * Register an MCP action handler
+   * Register an MCP tool handler
    * @param {string} actionName - Name of the action
    * @param {Function} handler - Handler function
    * @param {string} pluginId - ID of the plugin registering this action
@@ -41,11 +49,11 @@ class MCPExecutor extends EventEmitter {
     }
     this.pluginActions.get(pluginId).add(actionName);
 
-    this.logger.info(`MCP action registered: ${actionName} (plugin: ${pluginId})`);
+    this.logger.info(`MCP tool registered: ${actionName} (plugin: ${pluginId})`);
   }
 
   /**
-   * Unregister an MCP action
+   * Unregister an MCP tool
    * @param {string} actionName - Name of the action to unregister
    */
   unregisterAction(actionName) {
@@ -62,7 +70,7 @@ class MCPExecutor extends EventEmitter {
         }
       }
 
-      this.logger.info(`MCP action unregistered: ${actionName}`);
+      this.logger.info(`MCP tool unregistered: ${actionName}`);
     }
   }
 
@@ -77,12 +85,12 @@ class MCPExecutor extends EventEmitter {
         this.registeredActions.delete(actionName);
       }
       this.pluginActions.delete(pluginId);
-      this.logger.info(`All MCP actions unregistered for plugin: ${pluginId}`);
+      this.logger.info(`All MCP tools unregistered for plugin: ${pluginId}`);
     }
   }
 
   /**
-   * Execute an MCP action
+   * Execute an MCP tool
    * @param {string} actionName - Name of the action to execute
    * @param {Object} params - Parameters for the action
    * @param {string} role - Role of the requester (for permission checking)
@@ -93,9 +101,53 @@ class MCPExecutor extends EventEmitter {
 
     try {
       // Check if action is registered
-      const actionInfo = this.registeredActions.get(actionName);
+      let actionInfo = this.registeredActions.get(actionName);
       if (!actionInfo) {
-        throw new Error(`Unknown MCP action: ${actionName}`);
+        // Provide helpful error message for MCP tools
+        if (actionName.startsWith('mcp_')) {
+          const parts = actionName.split('_');
+          if (parts.length >= 3) {
+            const serverName = parts[1];
+            const toolName = parts.slice(2).join('_');
+            
+            // Check if server is connected
+            if (!this.mcpClients.has(serverName)) {
+              // Lazy load: connect the server on first use
+              this.logger.info(`MCP server "${serverName}" not connected, connecting on demand...`);
+              
+              try {
+                // Get the MCP manager to handle the connection
+                if (!this.mcpManager) {
+                  throw new Error('MCP Manager not available for lazy loading');
+                }
+                
+                // Start the server (which includes connection)
+                const startResult = await this.mcpManager.startServer(serverName);
+                
+                if (startResult && startResult.success) {
+                  this.logger.info(`Successfully connected MCP server "${serverName}" on demand`);
+                  
+                  // Re-check if action is now registered
+                  actionInfo = this.registeredActions.get(actionName);
+                  if (!actionInfo) {
+                    throw new Error(`MCP tool "${toolName}" not found on server "${serverName}" after connection.`);
+                  }
+                  // Continue to normal execution flow
+                } else {
+                  throw new Error(`Failed to connect MCP server "${serverName}": ${startResult?.error || 'Unknown error'}`);
+                }
+              } catch (error) {
+                throw new Error(`Failed to connect MCP server "${serverName}": ${error.message}`);
+              }
+            } else {
+              throw new Error(`MCP tool "${toolName}" not found on server "${serverName}". Use get_mcp_servers_status to check available tools.`);
+            }
+          } else {
+            throw new Error(`Unknown MCP tool: ${actionName}`);
+          }
+        } else {
+          throw new Error(`Unknown MCP tool: ${actionName}`);
+        }
       }
 
       // Basic permission check (can be overridden by plugins)
@@ -106,13 +158,13 @@ class MCPExecutor extends EventEmitter {
       // Validate parameters (can be overridden by plugins)
       this.validateParameters(actionName, params);
 
-      this.logger.info(`Executing MCP action: ${actionName} (role: ${role})`);
+      this.logger.info(`Executing MCP tool: ${actionName} (role: ${role})`);
 
       // Execute the action
       const result = await actionInfo.handler(params, role);
 
       const duration = Date.now() - startTime;
-      this.logger.info(`MCP action completed: ${actionName} (${duration}ms)`);
+      this.logger.info(`MCP tool completed: ${actionName} (${duration}ms)`);
 
       // Emit success event
       this.emit('action:success', {
@@ -128,7 +180,7 @@ class MCPExecutor extends EventEmitter {
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      this.logger.error(`MCP action failed: ${actionName} (${duration}ms)`, error);
+      this.logger.error(`MCP tool failed: ${actionName} (${duration}ms)`, error);
 
       // Emit error event
       this.emit('action:error', {
@@ -212,7 +264,7 @@ class MCPExecutor extends EventEmitter {
   }
 
   /**
-   * Connect to external MCP server and register tools as MCP actions
+   * Connect to external MCP server and register tools as MCP tools
    * @param {Object} serverConfig - MCP server configuration
    * @returns {Promise<MCPClient>} Connected MCP client
    */
@@ -225,7 +277,7 @@ class MCPExecutor extends EventEmitter {
       // Connect and discover capabilities
       await client.connect();
       
-      // Register MCP tool proxy actions
+      // Register MCP tool proxy handlers
       const tools = client.getToolsForLLM();
       for (const tool of tools) {
         const actionName = `mcp_${serverConfig.name}_${tool.name}`;
@@ -304,6 +356,34 @@ class MCPExecutor extends EventEmitter {
   getMCPToolsForPrompt() {
     const allTools = [];
     
+    // Add built-in tools
+    for (const [actionName, actionInfo] of this.registeredActions) {
+      if (actionInfo.pluginId === 'builtin') {
+        // Try to load the tool definition to get metadata
+        try {
+          const serverControlTools = require('./builtin-tools/server-control');
+          const toolDef = serverControlTools[actionName];
+          if (toolDef) {
+            allTools.push({
+              name: actionName,
+              description: toolDef.description || 'Built-in MCP tool',
+              inputSchema: toolDef.inputSchema || {},
+              isBuiltin: true
+            });
+          }
+        } catch (error) {
+          // Fallback if we can't load the definition
+          allTools.push({
+            name: actionName,
+            description: 'Built-in MCP tool',
+            inputSchema: {},
+            isBuiltin: true
+          });
+        }
+      }
+    }
+    
+    // Add external MCP server tools
     for (const [serverName, client] of this.mcpClients) {
       if (!client.connected || !client.initialized) continue;
       
@@ -340,7 +420,7 @@ class MCPExecutor extends EventEmitter {
       section += `### ${tool.name}\n`;
       section += `**Description**: ${tool.description}\n`;
       section += `**Server**: ${tool.server}\n`;
-      section += `**Usage**: Call this tool using the MCP action format\n`;
+      section += `**Usage**: Call this tool using the MCP tool format\n`;
       
       if (tool.inputSchema && tool.inputSchema.properties) {
         section += `**Parameters**:\n`;
@@ -353,7 +433,7 @@ class MCPExecutor extends EventEmitter {
     
     section += '**How to use MCP tools**:\n';
     section += '```json\n';
-    section += '"mcp_actions": [\n';
+    section += '"mcp_tools": [\n';
     section += '  {\n';
     section += '    "action": "mcp_servername_toolname",\n';
     section += '    "parameters": {\n';

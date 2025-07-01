@@ -104,6 +104,7 @@
     }
   }
 
+
   // 处理CoreAgent响应
   function handleCoreAgentResponse(response) {
     console.log('🔧 ChatWindow处理CoreAgent响应:', response);
@@ -229,7 +230,7 @@
         messages = [...messages];
         // 流式完成时强制滚动到底部
         scrollToBottom();
-
+        
         // 处理其他响应数据（如Adaptive Cards），但不添加消息
         dispatch('stateUpdate', {
           newState: response.new_variables,
@@ -301,6 +302,11 @@
   // 处理键盘事件
   function handleKeydown(event) {
     if (event.key === 'Enter' && !event.shiftKey) {
+      // 检查是否正在使用输入法（IME）
+      if (event.isComposing || event.keyCode === 229) {
+        // 正在使用输入法，不处理回车键
+        return;
+      }
       event.preventDefault();
       handleSubmit();
     }
@@ -354,8 +360,10 @@
 </script>
 
 <div class="chat-window">
-  <!-- 聊天消息区域 -->
-  <div class="chat-messages" bind:this={chatContainer}>
+  <!-- 主聊天区域 -->
+  <div class="chat-main">
+    <!-- 聊天消息区域 -->
+    <div class="chat-messages" bind:this={chatContainer}>
     {#if messages.length === 0}
       <div class="empty-chat">
         <div class="empty-icon">💬</div>
@@ -422,25 +430,26 @@
     </div>
   {/if}
 
-  <!-- 输入区域 -->
-  <div class="chat-input-section">
-    <div class="input-wrapper">
-      <input
-        type="text"
-        bind:value={chatInput}
-        on:keydown={handleKeydown}
-        placeholder="输入消息..."
-        disabled={isProcessing}
-        class="chat-input"
-        bind:this={chatInputElement}
-      />
-      <button
-        on:click={handleSubmit}
-        disabled={isProcessing || !chatInput.trim()}
-        class="send-btn"
-      >
-        {isProcessing ? '⏳' : '📤'}
-      </button>
+    <!-- 输入区域 -->
+    <div class="chat-input-section">
+      <div class="input-wrapper">
+        <input
+          type="text"
+          bind:value={chatInput}
+          on:keydown={handleKeydown}
+          placeholder="输入消息..."
+          disabled={isProcessing}
+          class="chat-input"
+          bind:this={chatInputElement}
+        />
+        <button
+          on:click={handleSubmit}
+          disabled={isProcessing || !chatInput.trim()}
+          class="send-btn"
+        >
+          {isProcessing ? '⏳' : '📤'}
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -448,9 +457,15 @@
 <style>
   .chat-window {
     display: flex;
-    flex-direction: column;
     height: 100%;
     background: white;
+  }
+  
+  .chat-main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
   }
 
   .chat-messages {

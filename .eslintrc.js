@@ -61,7 +61,7 @@ module.exports = {
       }
     },
     {
-      files: ['framework/core/**/*.js', 'framework/launcher.js', 'apps/**/mcp-actions/*.js'],
+      files: ['framework/core/**/*.js', 'framework/launcher.js', 'apps/**/mcp-tools/*.js'],
       env: {
         node: true,
         browser: false

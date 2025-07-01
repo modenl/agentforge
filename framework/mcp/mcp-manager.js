@@ -29,6 +29,12 @@ class MCPManager extends EventEmitter {
       // Initialize MCP Executor
       this.mcpExecutor = new MCPExecutor(supabaseClient, this.logger);
       
+      // Set circular reference for lazy loading
+      this.mcpExecutor.setMCPManager(this);
+      
+      // Register built-in MCP tools
+      this.registerBuiltinTools();
+      
       this.initialized = true;
       this.logger.info('MCP Manager initialized successfully');
       
@@ -38,6 +44,36 @@ class MCPManager extends EventEmitter {
     } catch (error) {
       this.logger.error('Failed to initialize MCP Manager:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Register built-in MCP tools
+   */
+  registerBuiltinTools() {
+    try {
+      const serverControlTools = require('./builtin-tools/server-control');
+      
+      for (const [toolName, toolDef] of Object.entries(serverControlTools)) {
+        if (toolDef && toolDef.handler) {
+          // Create a handler that passes the MCP Manager context
+          const contextualHandler = async (params, role) => {
+            const context = {
+              mcpManager: this,
+              logger: this.logger
+            };
+            return await toolDef.handler(params, context);
+          };
+          
+          // Register the tool with MCPExecutor
+          this.mcpExecutor.registerAction(toolName, contextualHandler, 'builtin');
+          this.logger.info(`Registered built-in MCP tool: ${toolName}`);
+        }
+      }
+      
+      this.logger.info('Built-in MCP tools registered successfully');
+    } catch (error) {
+      this.logger.warn('Failed to register built-in MCP tools:', error);
     }
   }
 
@@ -128,8 +164,11 @@ class MCPManager extends EventEmitter {
   async connectServer(serverConfig) {
     try {
       this.logger.info(`Connecting to MCP server: ${serverConfig.name} (app: ${serverConfig.appId})`);
+      console.log('🔌 [MCPManager.connectServer] Starting connection to:', serverConfig.name);
       
       const client = await this.mcpExecutor.connectMCPServer(serverConfig);
+      console.log('✅ [MCPManager.connectServer] Client connected, storing in connectedServers');
+      
       this.connectedServers.set(serverConfig.name, {
         client,
         config: serverConfig,
@@ -144,6 +183,40 @@ class MCPManager extends EventEmitter {
         serverInfo: client.getServerInfo()
       });
 
+      // Check if server supports iframe after connection
+      console.log('🔍 [MCPManager.connectServer] Checking iframe support for:', serverConfig.name);
+      if (client.supportsIframeEmbedding()) {
+        console.log('✅ [MCPManager.connectServer] Server supports iframe!');
+        const iframeConfig = client.getIframeConfig();
+        
+        // Try to get embeddable URL
+        if (iframeConfig && iframeConfig.requiresUrlCall) {
+          try {
+            console.log('📞 [MCPManager.connectServer] Getting embeddable URL...');
+            const urlResult = await client.getEmbeddableUrl({
+              mode: 'full',
+              allow_moves: true,
+              show_controls: true,
+              preferredMode: 'compact' // Request compact mode by default
+            });
+            
+            if (urlResult && urlResult.url) {
+              iframeConfig.url = urlResult.url;
+              iframeConfig.title = urlResult.title || serverConfig.name;
+              console.log('🎯 [MCPManager.connectServer] Got embeddable URL:', urlResult.url);
+              
+              // Emit iframe available event
+              this.emit('server-iframe-available', {
+                serverName: serverConfig.name,
+                config: iframeConfig
+              });
+            }
+          } catch (error) {
+            console.error('❌ [MCPManager.connectServer] Failed to get embeddable URL:', error.message);
+          }
+        }
+      }
+
       return { success: true, serverName: serverConfig.name };
       
     } catch (error) {
@@ -156,6 +229,112 @@ class MCPManager extends EventEmitter {
       });
 
       return { success: false, serverName: serverConfig.name, error: error.message };
+    }
+  }
+
+  /**
+   * Start a specific MCP server by name
+   * Used by state machine to dynamically control servers
+   */
+  async startServer(serverName) {
+    console.log('🚀 [MCPManager.startServer] Called with:', serverName);
+    try {
+      let result = { success: true, serverName };
+      
+      // Check if server is already connected
+      if (this.connectedServers.has(serverName)) {
+        this.logger.info(`MCP server ${serverName} is already connected`);
+        console.log('⚠️ [MCPManager.startServer] Server already connected');
+        result.alreadyConnected = true;
+      } else {
+        // Get server config
+        const serverConfig = this.serverConfigs.get(serverName);
+        if (!serverConfig) {
+          throw new Error(`No configuration found for server: ${serverName}`);
+        }
+
+        console.log('📋 [MCPManager.startServer] Connecting to server with config:', serverConfig);
+        // Connect to the server
+        result = await this.connectServer(serverConfig);
+      }
+      
+      // Always check iframe capability for start_mcp_server calls
+      // This ensures we get the iframe URL even if server was already connected
+      if (result.success) {
+        const serverData = this.connectedServers.get(serverName);
+        if (serverData) {
+          const supportsIframe = serverData.client.supportsIframeEmbedding();
+          
+          if (supportsIframe) {
+            const iframeConfig = serverData.client.getIframeConfig();
+            
+            // Check if we need to get the embeddable URL
+            if (iframeConfig && iframeConfig.requiresUrlCall) {
+              try {
+                // Call get_embeddable_url to get the actual URL
+                const urlResult = await serverData.client.getEmbeddableUrl({
+                  mode: 'full',
+                  allow_moves: true,
+                  show_controls: true
+                });
+                
+                if (urlResult && urlResult.url) {
+                  // Add the URL to the iframe config
+                  iframeConfig.url = urlResult.url;
+                  iframeConfig.title = urlResult.title || serverName;
+                  
+                  this.logger.info(`Successfully got embeddable URL for ${serverName}: ${urlResult.url}`);
+                } else {
+                  this.logger.warn(`get_embeddable_url returned no URL for ${serverName}`);
+                }
+              } catch (error) {
+                this.logger.error(`Failed to get embeddable URL for ${serverName}:`, error.message);
+                // Continue without URL - let the handler decide what to do
+              }
+            }
+            
+            result.iframeConfig = iframeConfig;
+            
+            console.log('🎯 [MCPManager] Emitting server-iframe-available event');
+            console.log('   serverName:', serverName);
+            console.log('   iframeConfig:', JSON.stringify(iframeConfig, null, 2));
+            
+            this.emit('server-iframe-available', {
+              serverName,
+              config: iframeConfig
+            });
+          }
+        } else {
+          this.logger.warn(`Server data not found for ${serverName} when checking iframe support`);
+        }
+      } else {
+        this.logger.error(`Failed to start server ${serverName}: ${result.error}`);
+      }
+      
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to start MCP server ${serverName}:`, error);
+      return { success: false, serverName, error: error.message };
+    }
+  }
+
+  /**
+   * Stop a specific MCP server by name
+   * Used by state machine to dynamically control servers
+   */
+  async stopServer(serverName) {
+    try {
+      const result = await this.disconnectServer(serverName);
+      
+      this.emit('server-stopped', {
+        serverName,
+        stoppedAt: new Date().toISOString()
+      });
+      
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to stop MCP server ${serverName}:`, error);
+      return { success: false, serverName, error: error.message };
     }
   }
 
@@ -223,23 +402,57 @@ class MCPManager extends EventEmitter {
   }
 
   /**
-   * Execute an MCP action
+   * Execute an MCP tool
    */
-  async executeMCPAction(actionName, params = {}, role = 'Agent') {
+  async executeMCPTool(toolName, params = {}, role = 'Agent') {
     if (!this.mcpExecutor) {
       throw new Error('MCP Manager not initialized');
     }
-    return await this.mcpExecutor.execute(actionName, params, role);
+    return await this.mcpExecutor.execute(toolName, params, role);
   }
 
   /**
-   * Register a custom MCP action
+   * Register a custom MCP tool
    */
-  registerMCPAction(actionName, handler, pluginId = 'framework') {
+  registerMCPTool(toolName, handler, pluginId = 'framework') {
     if (!this.mcpExecutor) {
       throw new Error('MCP Manager not initialized');
     }
-    return this.mcpExecutor.registerAction(actionName, handler, pluginId);
+    return this.mcpExecutor.register(toolName, handler, pluginId);
+  }
+
+  /**
+   * Get servers that support iframe embedding
+   */
+  getIframeCapableServers() {
+    const iframeServers = [];
+    
+    for (const [serverName, serverData] of this.connectedServers) {
+      const client = serverData.client;
+      if (client.supportsIframeEmbedding()) {
+        const iframeConfig = client.getIframeConfig();
+        iframeServers.push({
+          name: serverName,
+          appId: serverData.config.appId,
+          config: iframeConfig,
+          serverInfo: client.getServerInfo()
+        });
+      }
+    }
+    
+    return iframeServers;
+  }
+
+  /**
+   * Get iframe configuration for a specific server
+   */
+  getServerIframeConfig(serverName) {
+    const serverData = this.connectedServers.get(serverName);
+    if (!serverData) {
+      return null;
+    }
+    
+    return serverData.client.getIframeConfig();
   }
 
   /**
@@ -257,6 +470,7 @@ class MCPManager extends EventEmitter {
         tools: serverInfo.tools.length,
         resources: serverInfo.resources.length,
         prompts: serverInfo.prompts.length,
+        iframeSupported: serverInfo.iframeSupported,
         serverInfo: {
           name: serverInfo.serverInfo?.name,
           version: serverInfo.serverInfo?.version

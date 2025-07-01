@@ -2,8 +2,8 @@
   "mcpServers": {
     "chess-trainer-mcp": {
       "transportType": "stdio",
-      "command": "npx",
-      "args": ["--package=chess-trainer-mcp", "chess-trainer-mcp-server"]
+      "command": "node",
+      "args": ["/Users/xueminliu/work/agentwork/stockfishmcp/bin/mcp"]
     }
   }
 } 

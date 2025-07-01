@@ -19,12 +19,9 @@ class CoreAgent {
     this.systemPrompt = '';
     this.rawChatHistory = [];
     this.visibleChatHistory = [];
-    // 使用配置中的初始变量，或默认变量
-    this.currentVariables = config.initialVariables || {
-      role: 'child',
-      child_state: 'idle',
-      parent_state: null
-    };
+    // 使用配置中的初始变量，或空对象
+    // 让每个应用定义自己的初始变量
+    this.currentVariables = config.initialVariables || {};
     this.currentAdaptiveCard = null; // 当前卡片状态
   }
 
@@ -44,27 +41,70 @@ class CoreAgent {
     }
   }
 
+  generateMCPInfoSection(mcpManager) {
+    const connectedServers = mcpManager.getConnectedServersSummary();
+    if (connectedServers.length === 0) {
+      return '';
+    }
+
+    let section = '## 🔧 当前可用的MCP服务器\n\n';
+    section += '以下是已连接的MCP服务器，你可以直接使用它们的工具：\n\n';
+    
+    for (const server of connectedServers) {
+      section += `### 服务器: ${server.name}\n`;
+      section += `- 应用: ${server.appId}\n`;
+      section += `- 工具数量: ${server.tools}\n`;
+      section += `- 支持iframe: ${server.iframeSupported ? '是' : '否'}\n`;
+      
+      // 获取该服务器的具体工具列表
+      const tools = mcpManager.getMCPToolsForPrompt().filter(tool => tool.server === server.name);
+      if (tools.length > 0) {
+        section += `- 可用工具:\n`;
+        for (const tool of tools) {
+          section += `  - \`${tool.name}\`: ${tool.description}\n`;
+        }
+      }
+      section += '\n';
+    }
+    
+    section += '**重要**：以上服务器已经连接并可以直接使用，无需再调用 get_mcp_servers_status 查询。\n';
+    section += '**使用方式**：直接在 mcp_tools 中使用工具名称，如 `mcp_服务器名_工具名`。\n\n';
+    
+    return section;
+  }
+
   async loadSystemPrompt(businessPrompts = [], mcpManager = null) {
     const basePromptPath = path.join(__dirname, '../config/base-prompt.md');
 
     try {
       const basePrompt = await fs.readFile(basePromptPath, 'utf8');
 
-      // 按顺序拼接，确保通用规范在前，业务逻辑在后
+      // 构建prompt顺序：
+      // 1. 基础prompt
       let combinedPrompt = basePrompt.trim();
 
+      // 2. 注入当前可用的MCP服务器和工具信息（在业务prompt之前，让业务prompt可以引用）
+      if (mcpManager && mcpManager.isReady()) {
+        const mcpInfoSection = this.generateMCPInfoSection(mcpManager);
+        if (mcpInfoSection) {
+          combinedPrompt += '\n\n' + mcpInfoSection;
+          console.log('🔧 [MCP_INFO_INJECTED] MCP server info injected before business prompt');
+        }
+      }
+
+      // 3. 业务prompt（现在可以引用上面的MCP服务器信息）
       for (const businessPrompt of businessPrompts) {
         if (businessPrompt && businessPrompt.trim()) {
           combinedPrompt += '\n\n' + businessPrompt.trim();
         }
       }
 
-      // 自动注入MCP工具信息
+      // 4. MCP工具详细信息（可选，作为参考）
       if (mcpManager && mcpManager.isReady()) {
         const mcpToolsSection = mcpManager.generateMCPToolsPromptSection();
         if (mcpToolsSection) {
           combinedPrompt += '\n\n' + mcpToolsSection;
-          console.log('🔧 [MCP_TOOLS_INJECTED] MCP tools injected into system prompt');
+          console.log('🔧 [MCP_TOOLS_INJECTED] MCP tools details injected into system prompt');
         }
       }
 
@@ -216,15 +256,32 @@ class CoreAgent {
 
   cleanJsonString(jsonString) {
     try {
+      // 首先尝试直接解析
       const trimmed = jsonString.trim();
       JSON.parse(trimmed);
       return trimmed;
     } catch (error) {
-      // 只做最基本的清理：移除控制字符
-      const cleaned = jsonString
-        .replace(/[\r\n\t]/g, ' ')
-        .replace(/[^\x20-\x7E\u4e00-\u9fff]/g, '')
-        .trim();
+      // 如果失败，进行更激进的清理
+      // 1. 移除所有换行、回车、制表符
+      let cleaned = jsonString.replace(/[\r\n\t]/g, ' ');
+      
+      // 2. 移除所有不可见字符和控制字符（保留中文和全角符号）
+      cleaned = cleaned.replace(/[^\x20-\x7E\u4e00-\u9fff\uff00-\uffef]/g, '');
+      
+      // 3. 移除多余的空格
+      cleaned = cleaned.replace(/\s+/g, ' ');
+      
+      // 4. 去除首尾空白
+      cleaned = cleaned.trim();
+      
+      // 5. 尝试找到JSON的开始和结束
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+      }
+      
       return cleaned;
     }
   }
@@ -283,11 +340,12 @@ class CoreAgent {
           message: visibleMessage,
           new_variables: this.currentVariables,
           adaptive_card: this.currentAdaptiveCard,
-          mcp_actions: []
+          mcp_tools: [],
+          iframe_config: null
         };
       }
 
-      const rawJson = systemOutputMatch[1];
+      const rawJson = systemOutputMatch[1].trim(); // Trim whitespace before and after
       const cleanJson = this.cleanJsonString(rawJson);
 
       let systemOutput;
@@ -295,7 +353,18 @@ class CoreAgent {
         systemOutput = JSON.parse(cleanJson);
       } catch (parseError) {
         console.error('❌ [PARSE] JSON解析失败:', parseError);
+        console.error('原始JSON长度:', rawJson.length);
         console.error('原始JSON:', rawJson);
+        console.error('清理后JSON长度:', cleanJson.length);
+        console.error('清理后JSON:', cleanJson);
+        // 显示JSON末尾的字符
+        if (cleanJson.length > 400) {
+          console.error('JSON末尾100字符:', cleanJson.slice(-100));
+        }
+        // 显示位置442附近的字符
+        if (cleanJson.length > 442) {
+          console.error('位置442附近的字符:', cleanJson.slice(437, 447));
+        }
         return this.getErrorResponse(new Error('Invalid JSON in SYSTEMOUTPUT'));
       }
 
@@ -311,34 +380,34 @@ class CoreAgent {
 
       const processedCard = this.adaptCompactCard(systemOutput.adaptive_card);
 
-      // Validate and log mcp_actions if present
-      let mcpActions = systemOutput.mcp_actions || [];
-      if (mcpActions.length > 0) {
-        console.log('🔧 [MCP] Raw mcp_actions from LLM:', JSON.stringify(mcpActions, null, 2));
+      // Validate and log mcp_tools if present
+      let mcpTools = systemOutput.mcp_tools || [];
+      if (mcpTools.length > 0) {
+        console.log('🔧 [MCP] Raw mcp_tools from LLM:', JSON.stringify(mcpTools, null, 2));
         
-        // Validate each action
-        const validActions = [];
-        const invalidActions = [];
+        // Validate each tool
+        const validTools = [];
+        const invalidTools = [];
         
-        mcpActions.forEach((action, index) => {
-          if (!action || typeof action !== 'object') {
-            invalidActions.push({ index, reason: 'not an object', action });
-          } else if (!action.action || typeof action.action !== 'string') {
-            invalidActions.push({ index, reason: 'missing or invalid action field', action });
+        mcpTools.forEach((tool, index) => {
+          if (!tool || typeof tool !== 'object') {
+            invalidTools.push({ index, reason: 'not an object', tool });
+          } else if (!tool.action || typeof tool.action !== 'string') {
+            invalidTools.push({ index, reason: 'missing or invalid action field', tool });
           } else {
-            validActions.push(action);
+            validTools.push(tool);
           }
         });
         
-        if (invalidActions.length > 0) {
-          console.warn('⚠️ [MCP] Found invalid actions in LLM response:');
-          invalidActions.forEach(({ index, reason, action }) => {
-            console.warn(`  Action ${index}: ${reason} - ${JSON.stringify(action)}`);
+        if (invalidTools.length > 0) {
+          console.warn('⚠️ [MCP] Found invalid tools in LLM response:');
+          invalidTools.forEach(({ index, reason, tool }) => {
+            console.warn(`  Tool ${index}: ${reason} - ${JSON.stringify(tool)}`);
           });
         }
         
-        console.log(`✅ [MCP] ${validActions.length} valid actions, ${invalidActions.length} invalid actions`);
-        mcpActions = validActions;
+        console.log(`✅ [MCP] ${validTools.length} valid tools, ${invalidTools.length} invalid tools`);
+        mcpTools = validTools;
       }
 
       return {
@@ -346,7 +415,8 @@ class CoreAgent {
         message: visibleMessage,
         new_variables: this.currentVariables,
         adaptive_card: processedCard,
-        mcp_actions: mcpActions
+        mcp_tools: mcpTools,
+        iframe_config: systemOutput.iframe_config || null
       };
 
     } catch (error) {
@@ -425,7 +495,8 @@ class CoreAgent {
       message: '系统处理时出现错误，请稍后再试。',
       new_variables: this.currentVariables,
       adaptive_card: this.currentAdaptiveCard,
-      mcp_actions: []
+      mcp_tools: [],
+      iframe_config: null
     };
   }
 

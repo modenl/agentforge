@@ -81,6 +81,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // MCP相关API
   mcpGetData: (query) => ipcRenderer.invoke('mcp:getData', query),
   mcpExecute: (action) => ipcRenderer.invoke('mcp:execute', action),
+  
+  // MCP WebView相关API
+  getServerIframeConfig: (serverName) => ipcRenderer.invoke('mcp:getServerIframeConfig', serverName),
+  getIframeCapableServers: () => ipcRenderer.invoke('mcp:getIframeCapableServers'),
+  
+  // MCP服务器控制API
+  startMCPServer: (serverName) => ipcRenderer.invoke('mcp:startServer', serverName),
+  stopMCPServer: (serverName) => ipcRenderer.invoke('mcp:stopServer', serverName),
+  
+  // MCP服务器事件监听
+  onMCPServerIframeReady: (callback) => {
+    ipcRenderer.on('mcp:server-iframe-ready', (event, data) => callback(data));
+  },
+  onMCPServerStopped: (callback) => {
+    ipcRenderer.on('mcp:server-stopped', (event, data) => callback(data));
+  },
 
   // ==================== 调试和开发API ====================
 
@@ -101,6 +117,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     arch: process.arch,
     node: process.version
   }),
+
+  // 开发模式检测
+  isDev: process.env.NODE_ENV === 'development' || process.env.DEV_MODE === 'true',
+  
+  // 设置窗口标题
+  setWindowTitle: (title) => ipcRenderer.invoke('window:setTitle', title),
 
   // ==================== 实用工具 ====================
 
