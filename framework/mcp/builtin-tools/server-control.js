@@ -35,7 +35,7 @@ module.exports = {
             name: serverName,
             connected: !!connected,
             connectedAt: connected?.connectedAt,
-            iframeSupported: connected?.iframeSupported || false
+            webviewSupported: connected?.webviewSupported || false
           };
         });
         

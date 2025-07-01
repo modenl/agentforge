@@ -183,14 +183,14 @@ class MCPManager extends EventEmitter {
         serverInfo: client.getServerInfo()
       });
 
-      // Check if server supports iframe after connection
-      console.log('🔍 [MCPManager.connectServer] Checking iframe support for:', serverConfig.name);
-      if (client.supportsIframeEmbedding()) {
-        console.log('✅ [MCPManager.connectServer] Server supports iframe!');
-        const iframeConfig = client.getIframeConfig();
+      // Check if server supports webview after connection
+      console.log('🔍 [MCPManager.connectServer] Checking webview support for:', serverConfig.name);
+      if (client.supportsWebviewEmbedding()) {
+        console.log('✅ [MCPManager.connectServer] Server supports webview!');
+        const webviewConfig = client.getWebviewConfig();
         
         // Try to get embeddable URL
-        if (iframeConfig && iframeConfig.requiresUrlCall) {
+        if (webviewConfig && webviewConfig.requiresUrlCall) {
           try {
             console.log('📞 [MCPManager.connectServer] Getting embeddable URL...');
             const urlResult = await client.getEmbeddableUrl({
@@ -201,14 +201,14 @@ class MCPManager extends EventEmitter {
             });
             
             if (urlResult && urlResult.url) {
-              iframeConfig.url = urlResult.url;
-              iframeConfig.title = urlResult.title || serverConfig.name;
+              webviewConfig.url = urlResult.url;
+              webviewConfig.title = urlResult.title || serverConfig.name;
               console.log('🎯 [MCPManager.connectServer] Got embeddable URL:', urlResult.url);
               
-              // Emit iframe available event
-              this.emit('server-iframe-available', {
+              // Emit webview available event
+              this.emit('server-webview-available', {
                 serverName: serverConfig.name,
-                config: iframeConfig
+                config: webviewConfig
               });
             }
           } catch (error) {
@@ -258,18 +258,18 @@ class MCPManager extends EventEmitter {
         result = await this.connectServer(serverConfig);
       }
       
-      // Always check iframe capability for start_mcp_server calls
-      // This ensures we get the iframe URL even if server was already connected
+      // Always check webview capability for start_mcp_server calls
+      // This ensures we get the webview URL even if server was already connected
       if (result.success) {
         const serverData = this.connectedServers.get(serverName);
         if (serverData) {
-          const supportsIframe = serverData.client.supportsIframeEmbedding();
+          const supportsWebview = serverData.client.supportsWebviewEmbedding();
           
-          if (supportsIframe) {
-            const iframeConfig = serverData.client.getIframeConfig();
+          if (supportsWebview) {
+            const webviewConfig = serverData.client.getWebviewConfig();
             
             // Check if we need to get the embeddable URL
-            if (iframeConfig && iframeConfig.requiresUrlCall) {
+            if (webviewConfig && webviewConfig.requiresUrlCall) {
               try {
                 // Call get_embeddable_url to get the actual URL
                 const urlResult = await serverData.client.getEmbeddableUrl({
@@ -279,9 +279,9 @@ class MCPManager extends EventEmitter {
                 });
                 
                 if (urlResult && urlResult.url) {
-                  // Add the URL to the iframe config
-                  iframeConfig.url = urlResult.url;
-                  iframeConfig.title = urlResult.title || serverName;
+                  // Add the URL to the webview config
+                  webviewConfig.url = urlResult.url;
+                  webviewConfig.title = urlResult.title || serverName;
                   
                   this.logger.info(`Successfully got embeddable URL for ${serverName}: ${urlResult.url}`);
                 } else {
@@ -293,19 +293,19 @@ class MCPManager extends EventEmitter {
               }
             }
             
-            result.iframeConfig = iframeConfig;
+            result.webviewConfig = webviewConfig;
             
-            console.log('🎯 [MCPManager] Emitting server-iframe-available event');
+            console.log('🎯 [MCPManager] Emitting server-webview-available event');
             console.log('   serverName:', serverName);
-            console.log('   iframeConfig:', JSON.stringify(iframeConfig, null, 2));
+            console.log('   webviewConfig:', JSON.stringify(webviewConfig, null, 2));
             
-            this.emit('server-iframe-available', {
+            this.emit('server-webview-available', {
               serverName,
-              config: iframeConfig
+              config: webviewConfig
             });
           }
         } else {
-          this.logger.warn(`Server data not found for ${serverName} when checking iframe support`);
+          this.logger.warn(`Server data not found for ${serverName} when checking webview support`);
         }
       } else {
         this.logger.error(`Failed to start server ${serverName}: ${result.error}`);
@@ -440,19 +440,19 @@ class MCPManager extends EventEmitter {
       }
     }
     
-    return iframeServers;
+    return webviewServers;
   }
 
   /**
-   * Get iframe configuration for a specific server
+   * Get webview configuration for a specific server
    */
-  getServerIframeConfig(serverName) {
+  getServerWebviewConfig(serverName) {
     const serverData = this.connectedServers.get(serverName);
     if (!serverData) {
       return null;
     }
     
-    return serverData.client.getIframeConfig();
+    return serverData.client.getWebviewConfig();
   }
 
   /**
@@ -470,7 +470,7 @@ class MCPManager extends EventEmitter {
         tools: serverInfo.tools.length,
         resources: serverInfo.resources.length,
         prompts: serverInfo.prompts.length,
-        iframeSupported: serverInfo.iframeSupported,
+        webviewSupported: serverInfo.webviewSupported,
         serverInfo: {
           name: serverInfo.serverInfo?.name,
           version: serverInfo.serverInfo?.version
