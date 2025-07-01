@@ -2,6 +2,35 @@
 
 一个基于LLM+Prompt+MCP的智能代理应用开发框架，提供统一的AI代理架构、自适应UI和系统集成能力，让开发者可以快速构建各种智能桌面应用。
 
+![AI Chess Game 示例界面](docs/Screenshot%202025-06-30%20at%204.50.05%E2%80%AFPM.png)
+
+> 上图为基于AgentForge开发的国际象棋AI教学系统实际界面，支持自然语言对弈、AI提示与动态UI。
+
+---
+
+## 📚 目录
+
+- [核心思想：未来软件架构](#核心思想未来软件架构)
+- [架构优势](#架构优势)
+- [GUI革新：重新定义用户界面](#gui革新重新定义用户界面)
+- [未来展望](#未来展望)
+- [框架架构](#框架架构)
+- [框架核心功能](#框架核心功能)
+- [使用框架创建新应用](#使用框架创建新应用)
+- [框架配置说明](#框架配置说明)
+- [示例应用](#示例应用)
+- [开发工具和脚本](#开发工具和脚本)
+- [开发最佳实践](#开发最佳实践)
+- [快速开始](#快速开始)
+- [安全特性](#安全特性)
+- [故障排除](#故障排除)
+- [贡献指南](#贡献指南)
+- [许可证](#许可证)
+- [支持](#支持)
+- [致谢](#致谢)
+
+---
+
 ## 💡 核心思想：未来软件架构
 
 AgentForge 基于一个革命性的软件架构理念：
@@ -269,7 +298,7 @@ agentforge/
 - 📦 **动态加载**: 运行时加载应用配置和资源
 - 🔄 **生命周期**: 应用启动、运行、关闭管理
 - 📋 **配置注入**: 自动加载应用特定配置
-- 🔗 **依赖管理**: MCP动作和提示词自动注册
+- 🔗 **依赖管理**: MCP工具和提示词自动注册
 
 ### 3. MCP协议执行器
 
@@ -310,7 +339,7 @@ mkdir apps/my-new-app
 cd apps/my-new-app
 
 # 创建必要的目录
-mkdir mcp-actions
+mkdir mcp-tools
 mkdir logs
 ```
 
@@ -400,15 +429,15 @@ module.exports = {
 - 其他应用特定的MCP功能...
 ```
 
-### 步骤4: 创建MCP动作
+### 步骤4: 创建MCP工具
 
-创建 `apps/my-new-app/mcp-actions/my-custom-action.js`:
+创建 `apps/my-new-app/mcp-tools/my-custom-tool.js`:
 
 ```javascript
 const { logger } = require('../../../framework/core/logger');
 
 /**
- * 自定义MCP动作示例
+ * 自定义MCP工具示例
  */
 module.exports = {
   name: 'my_custom_action',
@@ -568,7 +597,7 @@ module.exports = {
 **核心文件**:
 - `config.js`: 象棋应用配置
 - `chess-game-prompt.md`: 象棋AI助手提示词
-- `mcp-actions/chess-renderer.js`: 棋盘渲染MCP动作
+- `mcp-tools/chess-renderer.js`: 棋盘渲染MCP工具
 
 ### 2. 游戏时间管理应用 (`apps/game-time-manager/`)
 
@@ -581,7 +610,7 @@ module.exports = {
 **核心文件**:
 - `config.js`: 时间管理应用配置
 - `game-time-manager-prompt.md`: 时间管理AI助手提示词
-- `mcp-actions/`: 多个MCP动作
+- `mcp-tools/`: 多个MCP工具
   - `chrome-controller.js`: 浏览器控制
   - `game-launcher.js`: 游戏启动器
   - `notification.js`: 系统通知
@@ -609,9 +638,9 @@ npm run debug               # 调试模式(启用Chrome DevTools)
 
 ### 开发最佳实践
 
-1. **模块化设计**: 将功能拆分为独立的MCP动作
+1. **模块化设计**: 将功能拆分为独立的MCP工具
 2. **配置驱动**: 使用配置文件而不是硬编码
-3. **错误处理**: 在MCP动作中添加完善的错误处理
+3. **错误处理**: 在MCP工具中添加完善的错误处理
 4. **日志记录**: 使用框架提供的日志系统
 5. **状态管理**: 在提示词中明确定义状态机
 6. **UI一致性**: 使用自适应卡片保持UI一致性
@@ -664,7 +693,7 @@ npm run debug               # 调试模式(启用Chrome DevTools)
 ## 🔒 安全特性
 
 ### 框架级安全
-- **权限管理**: MCP动作的基于角色访问控制
+- **权限管理**: MCP工具的基于角色访问控制
 - **API安全**: AI API密钥的安全管理
 - **进程隔离**: 应用间的进程隔离
 - **审计日志**: 完整的操作审计跟踪
@@ -688,8 +717,8 @@ npm run debug               # 调试模式(启用Chrome DevTools)
 - 检查提示词文件是否存在
 - 查看应用日志文件
 
-**MCP动作执行失败**
-- 检查MCP动作的参数定义
+**MCP工具执行失败**
+- 检查MCP工具的参数定义
 - 验证权限配置
 - 查看框架日志
 
