@@ -18,7 +18,6 @@ const logger = require('./logger');
  */
 class AppManager {
   constructor(config = {}) {
-    console.log('[AppManager] Constructor received config:', JSON.stringify(config, null, 2));
     
     // First preserve the original config values
     const originalAppName = config.appName;
@@ -45,7 +44,6 @@ class AppManager {
       this.config.appName = 'Framework App';
     }
     
-    console.log('[AppManager] Final config.appName:', this.config.appName);
 
     this.mainWindow = null;
     this.tray = null;
@@ -203,13 +201,11 @@ class AppManager {
 
     // Collect business prompts from all plugins
     const businessPrompts = [];
-    console.log(`📄 Collecting business prompts from ${this.plugins.size} plugins...`);
     
     for (const plugin of this.plugins.values()) {
       if (typeof plugin.getBusinessPrompt === 'function') {
         try {
           const prompt = await plugin.getBusinessPrompt();
-          console.log(`✅ Got business prompt from ${plugin.id || 'unnamed'}: ${prompt ? prompt.length : 0} chars`);
           
           if (prompt) {
             businessPrompts.push(prompt);
@@ -218,13 +214,10 @@ class AppManager {
           logger.warn(`Failed to get business prompt from ${plugin.constructor.name}:`, error);
         }
       } else {
-        console.log(`⚠️ Plugin ${plugin.id || 'unnamed'} has no getBusinessPrompt method`);
       }
     }
 
-    console.log(`📋 Total business prompts collected: ${businessPrompts.length}`);
     if (businessPrompts.length > 0) {
-      console.log(`📝 Combined prompt length: ${businessPrompts.join('\n\n').length} chars`);
     }
   }
 
@@ -241,7 +234,9 @@ class AppManager {
 
     for (const [toolName, handler] of Object.entries(tools)) {
       logger.info(`Registering MCP tool: ${toolName} for plugin ${pluginId}`);
-      this.mcpManager.registerMCPTool(toolName, handler, pluginId);
+      if (this.mcpManager) {
+        this.mcpManager.registerMCPTool(toolName, handler, pluginId);
+      }
     }
     
     logger.info(`Completed registering ${Object.keys(tools).length} MCP tools for plugin ${pluginId}`);
@@ -265,30 +260,37 @@ class AppManager {
       }
     }
 
-    // Initialize MCP Manager
-    this.mcpManager = new MCPManager(logger);
-    await this.mcpManager.initialize(this.supabaseClient);
-    logger.info('MCP Manager initialized');
+    // Initialize MCP Manager (unless disabled for testing)
+    if (process.env.DISABLE_MCP === 'true') {
+      logger.info('MCP disabled by environment variable');
+      this.mcpManager = null;
+    } else {
+      this.mcpManager = new MCPManager(logger);
+      await this.mcpManager.initialize(this.supabaseClient);
+      logger.info('MCP Manager initialized');
+    }
     
     // Listen for MCP Manager events and forward to renderer
-    this.mcpManager.on('server-webview-available', (data) => {
-      logger.info('MCP server UI available:', data);
-      // Forward to all renderer windows
-      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send('mcp:server-webview-ready', {
-          serverName: data.serverName,
-          webviewConfig: data.config
-        });
-      }
-    });
-    
-    this.mcpManager.on('server-stopped', (data) => {
-      logger.info('MCP server stopped:', data);
-      // Forward to all renderer windows
-      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send('mcp:server-stopped', data);
-      }
-    });
+    if (this.mcpManager) {
+      this.mcpManager.on('server-webview-available', (data) => {
+        logger.info('MCP server UI available:', data);
+        // Forward to all renderer windows
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('mcp:server-webview-ready', {
+            serverName: data.serverName,
+            webviewConfig: data.config
+          });
+        }
+      });
+      
+      this.mcpManager.on('server-stopped', (data) => {
+        logger.info('MCP server stopped:', data);
+        // Forward to all renderer windows
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('mcp:server-stopped', data);
+        }
+      });
+    }
   }
 
   /**
@@ -303,19 +305,21 @@ class AppManager {
     }
     
     // Register MCP server configurations from framework config
-    if (this.config.mcpServers && typeof this.config.mcpServers === 'object') {
+    if (this.mcpManager && this.config.mcpServers && typeof this.config.mcpServers === 'object') {
       this.mcpManager.registerServerConfigs('framework', this.config.mcpServers);
     }
     
     // Register MCP server configurations from plugin configs
     for (const plugin of this.plugins.values()) {
       const pluginId = plugin.id || plugin.constructor.name;
-      if (plugin.config && plugin.config.mcpServers && typeof plugin.config.mcpServers === 'object') {
+      if (this.mcpManager && plugin.config && plugin.config.mcpServers && typeof plugin.config.mcpServers === 'object') {
         this.mcpManager.registerServerConfigs(pluginId, plugin.config.mcpServers);
       }
     }
     
-    logger.info(`Registered ${this.mcpManager.serverConfigs.size} MCP server configurations`);
+    if (this.mcpManager) {
+      logger.info(`Registered ${this.mcpManager.serverConfigs.size} MCP server configurations`);
+    }
   }
 
   /**
@@ -331,27 +335,27 @@ class AppManager {
     }
     
     // Register MCP server configurations from framework config
-    if (this.config.mcpServers && typeof this.config.mcpServers === 'object') {
+    if (this.mcpManager && this.config.mcpServers && typeof this.config.mcpServers === 'object') {
       this.mcpManager.registerServerConfigs('framework', this.config.mcpServers);
     }
     
     // Register MCP server configurations from plugin configs
     for (const plugin of this.plugins.values()) {
       const pluginId = plugin.id || plugin.constructor.name;
-      if (plugin.config && plugin.config.mcpServers && typeof plugin.config.mcpServers === 'object') {
+      if (this.mcpManager && plugin.config && plugin.config.mcpServers && typeof plugin.config.mcpServers === 'object') {
         this.mcpManager.registerServerConfigs(pluginId, plugin.config.mcpServers);
       }
     }
     
     // Connect to all registered servers
-    const connectionResult = await this.mcpManager.connectAllServers();
+    const connectionResult = this.mcpManager ? await this.mcpManager.connectAllServers() : { success: 0, failed: 0, total: 0 };
     
     if (connectionResult) {
       const { successCount, failureCount } = connectionResult;
       logger.info(`MCP server connections completed: ${successCount} successful, ${failureCount} failed`);
       
       // Log summary of connected servers
-      const connectedServers = this.mcpManager.getConnectedServersSummary();
+      const connectedServers = this.mcpManager ? this.mcpManager.getConnectedServersSummary() : [];
       if (connectedServers.length > 0) {
         logger.info('Connected MCP servers summary:');
         for (const server of connectedServers) {
@@ -370,13 +374,11 @@ class AppManager {
 
     // Collect business prompts from all plugins
     const businessPrompts = [];
-    console.log(`📄 Collecting business prompts from ${this.plugins.size} plugins...`);
     
     for (const plugin of this.plugins.values()) {
       if (typeof plugin.getBusinessPrompt === 'function') {
         try {
           const prompt = await plugin.getBusinessPrompt();
-          console.log(`✅ Got business prompt from ${plugin.id || 'unnamed'}: ${prompt ? prompt.length : 0} chars`);
           
           if (prompt) {
             businessPrompts.push(prompt);
@@ -385,13 +387,10 @@ class AppManager {
           logger.warn(`Failed to get business prompt from ${plugin.constructor.name}:`, error);
         }
       } else {
-        console.log(`⚠️ Plugin ${plugin.id || 'unnamed'} has no getBusinessPrompt method`);
       }
     }
 
-    console.log(`📋 Total business prompts collected: ${businessPrompts.length}`);
     if (businessPrompts.length > 0) {
-      console.log(`📝 Combined prompt length: ${businessPrompts.join('\n\n').length} chars`);
     }
 
     // Initialize core agent with combined prompts and MCP manager
@@ -461,6 +460,14 @@ class AppManager {
         };
 
         const response = await this.coreAgent.processInputStreaming(userInput, context, streamCallback);
+        
+        console.log('🌊 [AppManager] 流式处理完成，响应内容:', {
+          success: response.success,
+          messageLength: response.message ? response.message.length : 0,
+          message: response.message ? response.message.substring(0, 100) + '...' : 'NO MESSAGE',
+          hasAdaptiveCard: !!response.adaptive_card,
+          hasMCPTools: !!(response.mcp_tools && response.mcp_tools.length > 0)
+        });
 
         // Execute MCP tools if any
         if (response.mcp_tools && response.mcp_tools.length > 0) {
@@ -484,6 +491,13 @@ class AppManager {
           }
         }
 
+        console.log('🌊 [AppManager] 最终返回给前端的响应:', {
+          success: response.success,
+          hasMessage: !!response.message,
+          messageLength: response.message ? response.message.length : 0,
+          messagePreview: response.message ? response.message.substring(0, 50) + '...' : 'NO MESSAGE'
+        });
+        
         return response;
       } catch (error) {
         logger.error('Streaming processing error:', error);
@@ -541,7 +555,7 @@ class AppManager {
         if (!this.mcpManager || !this.mcpManager.isReady()) {
           return { success: false, error: 'MCP Manager not ready' };
         }
-        const result = await this.mcpManager.startServer(serverName);
+        const result = this.mcpManager ? await this.mcpManager.startServer(serverName) : { success: false, error: 'MCP disabled' };
         
         // If server has webview capability, notify renderer
         if (result.success && result.webviewConfig) {
@@ -668,6 +682,13 @@ class AppManager {
    * This works by re-extracting the visible message from the original AI response after SVG injection
    */
   injectMCPResultsIntoAIResponse(response, mcpResults) {
+    console.log('🔧 [injectMCPResultsIntoAIResponse] 开始处理，当前response:', {
+      hasMessage: !!response.message,
+      messageLength: response.message ? response.message.length : 0,
+      messageType: typeof response.message,
+      messageValue: response.message
+    });
+    
     if (!mcpResults || mcpResults.length === 0) {
       logger.info('No MCP results to inject');
       return;
@@ -675,26 +696,50 @@ class AppManager {
 
     logger.info(`Processing ${mcpResults.length} MCP results for injection`);
     
-    // We need to get the original AI response with SYSTEMOUTPUT included
-    // Since we don't have direct access to it here, we'll enhance the existing message
+    // Process each MCP result
     for (const mcpResult of mcpResults) {
-      logger.info(`MCP result: action=${mcpResult.action}, success=${mcpResult.success}, hasSVG=${!!(mcpResult.result && mcpResult.result.svg)}`);
+      logger.info(`MCP result: action=${mcpResult.action}, success=${mcpResult.success}, hasContent=${!!(mcpResult.result && mcpResult.result.content)}`);
       
-      if (mcpResult.success && mcpResult.result && mcpResult.result.svg) {
-        const svgContent = mcpResult.result.svg;
-        logger.info(`SVG content length: ${svgContent.length} characters`);
+      if (mcpResult.success && mcpResult.result) {
+        let contentToAppend = '';
         
-        // Check current message content
-        const messageSnippet = response.message ? response.message.substring(0, 200) : 'NO MESSAGE';
-        logger.info(`Message snippet: ${messageSnippet}...`);
+        // Handle SVG content
+        if (mcpResult.result.svg) {
+          const svgContent = mcpResult.result.svg;
+          logger.info(`SVG content length: ${svgContent.length} characters`);
+          contentToAppend = '\n\n**当前棋盘状态：**\n\n' + svgContent;
+        }
+        // Handle text content (from MCP tools like get_game_state)
+        else if (mcpResult.result.content && Array.isArray(mcpResult.result.content)) {
+          for (const contentItem of mcpResult.result.content) {
+            if (contentItem.type === 'text' && contentItem.text) {
+              logger.info(`Text content length: ${contentItem.text.length} characters`);
+              contentToAppend = '\n\n' + contentItem.text;
+            }
+          }
+        }
         
-        // Since the message has already been processed, we need to append SVG
-        // The placeholder replacement approach won't work here because extractVisibleMessage has already run
-        logger.info('Appending SVG to processed message');
-        response.message = (response.message || '') + '\n\n**当前棋盘状态：**\n\n' + svgContent;
-        logger.info(`SVG appended to message, final length: ${response.message.length} characters`);
+        // Append content to message
+        if (contentToAppend) {
+          // Replace the placeholder message with actual content
+          if (response.message && response.message.includes('正在获取') && response.message.includes('请稍等')) {
+            // Replace placeholder message entirely
+            response.message = contentToAppend.trim();
+          } else {
+            // Append to existing message
+            response.message = (response.message || '') + contentToAppend;
+          }
+          logger.info(`Content appended to message, final length: ${response.message.length} characters`);
+        }
       }
     }
+    
+    console.log('🔧 [injectMCPResultsIntoAIResponse] 处理完成，最终response:', {
+      hasMessage: !!response.message,
+      messageLength: response.message ? response.message.length : 0,
+      messageType: typeof response.message,
+      messageValue: response.message ? response.message.substring(0, 100) + '...' : 'NO MESSAGE'
+    });
   }
 
   /**
@@ -726,6 +771,12 @@ class AppManager {
     logger.info('Starting to create main window...');
     logger.info('Creating window with title:', this.config.appName);
 
+    // Determine if window should be shown (hide in test unless explicitly requested)
+    const isTest = process.env.NODE_ENV === 'test';
+    const showWindow = isTest ? (process.env.SHOW_TEST_WINDOW === 'true' || process.env.HEADED === '1') : true;
+    
+    logger.info(`Window visibility settings: NODE_ENV=${process.env.NODE_ENV}, isTest=${isTest}, HEADED=${process.env.HEADED}, showWindow=${showWindow}`);
+
     this.mainWindow = new BrowserWindow({
       title: this.config.appName || 'Framework App',
       width: this.config.window.defaultWidth,
@@ -738,10 +789,18 @@ class AppManager {
         preload: path.join(__dirname, '../renderer/preload.js'),
         webviewTag: true, // Enable webview tag for MCP View
         // Enable dev tools in dev mode
-        devTools: isDev || this.config.window.enableDevTools !== false
+        devTools: isDev || this.config.window.enableDevTools !== false,
+        // Use offscreen rendering in test mode when hidden
+        offscreen: isTest && !showWindow
       },
-      show: true,
-      icon: this.config.window.icon
+      show: showWindow,
+      icon: this.config.window.icon,
+      // Additional settings for test mode
+      ...(isTest && !showWindow ? {
+        skipTaskbar: true,
+        alwaysOnTop: false,
+        focusable: false
+      } : {})
     });
 
     logger.info('BrowserWindow created, preparing to load UI...');
@@ -778,10 +837,10 @@ class AppManager {
       this.mainWindow.setTitle(titleToSet);
       logger.info(`Window title set to: ${titleToSet}`);
       
-      // Open DevTools if explicitly enabled
-      if (this.config.window.enableDevTools) {
+      // Open DevTools if explicitly enabled or in test environment
+      if (this.config.window.enableDevTools || process.env.ELECTRON_DEV_TOOLS === 'true') {
         this.mainWindow.webContents.openDevTools();
-        logger.info('DevTools opened (explicitly enabled)');
+        logger.info('DevTools opened (explicitly enabled or test environment)');
       }
       
       // Set app name in the renderer process
@@ -796,12 +855,19 @@ class AppManager {
       throw error;
     }
 
-    // 立即最大化窗口
-    this.mainWindow.maximize();
-    logger.info('Window maximized');
+    // 立即最大化窗口（除非在测试模式下隐藏）
+    if (!isTest || showWindow) {
+      this.mainWindow.maximize();
+      logger.info('Window maximized');
+    }
     
     this.mainWindow.once('ready-to-show', () => {
       logger.info('Window is ready to show');
+      // In test mode, ensure window stays hidden unless explicitly requested
+      if (isTest && !showWindow) {
+        logger.info('Keeping window hidden in test mode');
+        this.mainWindow.hide();
+      }
     });
 
     // Add error event listeners

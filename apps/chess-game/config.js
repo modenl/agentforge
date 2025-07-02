@@ -19,7 +19,7 @@ module.exports = {
 
   // AI Agent configuration
   agent: {
-    model: 'gpt-4.1-mini',
+    model: 'gpt-4.1',
     temperature: 0.7,
     maxTokens: 32768,
     maxHistoryMessages: 100,

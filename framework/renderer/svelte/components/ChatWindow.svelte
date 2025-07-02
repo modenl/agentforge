@@ -1,23 +1,23 @@
 <script>
-  import { createEventDispatcher, afterUpdate, onMount } from 'svelte';
-  import SvelteMarkdown from 'svelte-markdown';
+  import { onMount } from 'svelte';
+  import { marked } from 'marked';
   import AdaptiveCardPanel from './AdaptiveCardPanel.svelte';
 
-  const dispatch = createEventDispatcher();
-
-  // 输入辅助卡片
-  export let inputAssistCard = null;
+  // Props including callback functions
+  let { 
+    inputAssistCard = null,
+    onstateUpdate = () => {},
+    oninputAssistAction = () => {}
+  } = $props();
 
   // 监听inputAssistCard变化
-  $: {
-    console.log('🎯 ChatWindow收到inputAssistCard更新:', inputAssistCard);
-    console.log('🔍 ChatWindow inputAssistCard是否为null:', inputAssistCard === null);
-  }
+  $effect(() => {
+  });
 
   // 聊天状态（ChatWindow自己管理）
-  let messages = [];
-  let isProcessing = false;
-  let chatInput = '';
+  let messages = $state([]);
+  let isProcessing = $state(false);
+  let chatInput = $state('');
   let chatContainer;
   let chatInputElement; // 添加输入框引用
   let electronAPI = null;
@@ -35,10 +35,12 @@
       // 加载聊天历史
       await loadChatHistory();
 
+      // 等待一小段时间确保事件处理器已连接
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       // 发送系统初始化消息
       await sendSystemInitialization();
 
-      console.log('💬 ChatWindow initialized successfully');
       
       // 初始化完成后聚焦输入框
       focusInput();
@@ -48,10 +50,11 @@
   });
 
   // Auto-scroll to bottom when new messages arrive
-  afterUpdate(() => {
-    if (chatContainer) {
+  $effect(() => {
+    if (chatContainer && messages.length > 0) {
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
+    
   });
 
   // 强制滚动到底部的函数
@@ -83,31 +86,47 @@
 
   // 发送系统初始化消息
   async function sendSystemInitialization() {
-    try {
-      console.log('🔧 ChatWindow发送系统初始化消息...');
+    // Retry logic for test environment
+    let retries = 3;
+    let delay = 1000;
+    
+    while (retries > 0) {
+      try {
 
-      const response = await electronAPI.processCoreInput('系统初始化', {
-        timestamp: new Date().toISOString(),
-        isSystemEvent: true
-      });
+        const response = await electronAPI.processCoreInput('系统初始化', {
+          timestamp: new Date().toISOString(),
+          isSystemEvent: true
+        });
 
-      if (response && response.success) {
-        console.log('✅ 系统初始化成功');
-        handleCoreAgentResponse(response);
-      } else {
-        console.error('❌ 系统初始化失败:', response?.error);
-        addMessage('系统初始化失败', 'system');
+        if (response && response.success) {
+          console.log('✅ 系统初始化成功');
+          handleCoreAgentResponse(response);
+          return; // Success, exit
+        } else {
+          console.error('❌ 系统初始化失败:', response?.error);
+          if (retries === 1) {
+            addMessage('系统初始化失败', 'system');
+          }
+        }
+      } catch (error) {
+        console.error('❌ 系统初始化异常:', error);
+        if (retries === 1) {
+          addMessage('系统初始化异常', 'system');
+        }
       }
-    } catch (error) {
-      console.error('❌ 系统初始化异常:', error);
-      addMessage('系统初始化异常', 'system');
+      
+      retries--;
+      if (retries > 0) {
+        console.log(`⏳ 重试系统初始化 (${retries} 次剩余)...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 1.5; // Exponential backoff
+      }
     }
   }
 
 
   // 处理CoreAgent响应
   function handleCoreAgentResponse(response) {
-    console.log('🔧 ChatWindow处理CoreAgent响应:', response);
 
     // 添加AI消息到聊天
     if (response.message) {
@@ -115,21 +134,28 @@
     }
 
     // 通知App更新状态和Adaptive Card
-    dispatch('stateUpdate', {
-      newState: response.new_variables,
-      adaptiveCard: response.adaptive_card
+    onstateUpdate({
+      detail: {
+        newState: response.new_variables,
+        adaptiveCard: response.adaptive_card
+      }
     });
   }
 
   // 添加消息到聊天历史
   function addMessage(content, role) {
+    
     const message = {
       id: Date.now() + Math.random(),
       role: role,
       content: typeof content === 'string' ? content : String(content || ''),
       timestamp: new Date().toISOString()
     };
+    
+    
     messages = [...messages, message];
+    
+    
     // 添加消息后滚动到底部
     scrollToBottom();
   }
@@ -187,8 +213,17 @@
             const systemOutputIndex = contentBuffer.indexOf('<<<SYSTEMOUTPUT>>>');
             const remainingContent = contentBuffer.substring(0, systemOutputIndex).trim();
             displayedContent += remainingContent;
-            streamingMessage.content = displayedContent;
-            messages = [...messages];
+            
+            // 更新消息内容 - 需要创建新对象来触发响应式更新
+            const msgIndex = messages.findIndex(msg => msg.id === streamingMessage.id);
+            if (msgIndex !== -1) {
+              messages[msgIndex] = {
+                ...messages[msgIndex],
+                content: displayedContent
+              };
+              messages = [...messages];
+            }
+            
             // 流式完成时强制滚动到底部
             scrollToBottom();
             return; // 停止处理后续chunks
@@ -200,9 +235,17 @@
             displayedContent += toDisplay;
             contentBuffer = contentBuffer.substring(contentBuffer.length - BUFFER_SIZE);
 
-            streamingMessage.content = displayedContent;
-            messages = [...messages];
-            // 流式完成时强制滚动到底部
+            // 更新消息内容 - 需要创建新对象来触发响应式更新
+            const msgIndex = messages.findIndex(msg => msg.id === streamingMessage.id);
+            if (msgIndex !== -1) {
+              messages[msgIndex] = {
+                ...messages[msgIndex],
+                content: displayedContent
+              };
+              messages = [...messages];
+            }
+            
+            // 流式显示时也要滚动
             scrollToBottom();
           }
         }
@@ -227,14 +270,28 @@
             streamingMessage.content = displayedContent;
           }
         }
-        messages = [...messages];
+        
+        // 找到流式消息的索引并更新它
+        const streamingIndex = messages.findIndex(msg => msg.id === streamingMessage.id);
+        if (streamingIndex !== -1) {
+          // 创建一个新的消息对象来触发Svelte的响应式更新
+          messages[streamingIndex] = {
+            ...streamingMessage,
+            content: response.message || streamingMessage.content,
+            isStreaming: false
+          };
+          messages = [...messages];
+        }
+        
         // 流式完成时强制滚动到底部
         scrollToBottom();
         
         // 处理其他响应数据（如Adaptive Cards），但不添加消息
-        dispatch('stateUpdate', {
-          newState: response.new_variables,
-          adaptiveCard: response.adaptive_card
+        onstateUpdate({
+          detail: {
+            newState: response.new_variables,
+            adaptiveCard: response.adaptive_card
+          }
         });
       } else {
         // 移除流式消息并添加错误消息
@@ -290,7 +347,7 @@
     }
 
     // 转发事件给父组件(App.svelte)
-    dispatch('inputAssistAction', event.detail);
+    oninputAssistAction({ detail: event.detail });
     
     // 处理完成后重新聚焦输入框
     focusInput();
@@ -384,15 +441,12 @@
               <!-- 直接渲染包含SVG的HTML内容 -->
               <div class="html-content">{@html message.content}</div>
             {:else}
-              <SvelteMarkdown
-                source={typeof message.content === 'string' ? message.content : String(message.content || '')}
-                options={{
-                  html: true,
-                  breaks: true,
-                  linkify: true
-                }}
-              />
-
+              <div class="markdown-content">
+                {@html marked(message.content || '')}
+                {#if message.isStreaming}
+                  <span class="streaming-indicator">▌</span>
+                {/if}
+              </div>
             {/if}
           </div>
         </div>
@@ -425,7 +479,7 @@
       <AdaptiveCardPanel
         cards={[inputAssistCard]}
         compact={true}
-        on:cardAction={handleInputAssistCardAction}
+        oncardAction={handleInputAssistCardAction}
       />
     </div>
   {/if}
@@ -436,14 +490,14 @@
         <input
           type="text"
           bind:value={chatInput}
-          on:keydown={handleKeydown}
+          onkeydown={handleKeydown}
           placeholder="输入消息..."
           disabled={isProcessing}
           class="chat-input"
           bind:this={chatInputElement}
         />
         <button
-          on:click={handleSubmit}
+          onclick={handleSubmit}
           disabled={isProcessing || !chatInput.trim()}
           class="send-btn"
         >
@@ -738,6 +792,46 @@
 
   :global(.chat-window .message.user .message-content svg) {
     /* 用户消息中的SVG保持透明背景 */
+  }
+
+  /* Markdown内容样式 */
+  .markdown-content {
+    line-height: 1.6;
+    word-wrap: break-word;
+    color: #212121 !important;
+    min-height: 20px;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  /* 确保markdown内的段落可见 */
+  :global(.markdown-content p) {
+    margin: 0 0 10px 0;
+    color: #212121 !important;
+    display: block !important;
+  }
+  
+  /* 确保用户消息中的markdown内容也可见 */
+  :global(.message.user .markdown-content) {
+    color: white !important;
+  }
+  
+  :global(.message.user .markdown-content p) {
+    color: white !important;
+  }
+  
+  /* 流式指示器样式 */
+  .streaming-indicator {
+    display: inline-block;
+    animation: blink 1s infinite;
+    color: #1976d2;
+    font-weight: bold;
+  }
+  
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
   }
 
   /* HTML内容样式 */

@@ -1,21 +1,26 @@
 <script>
-  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   
-  export let url = '';
-  export let serverName = '';
-  export let title = '';
-  export let viewMode = 'normal'; // 'normal', 'compact', 'fullscreen', 'mini'
-  export let width = '100%';
-  export let height = '100%';
-  export let minWidth = 400;
-  export let minHeight = 300;
-  export let resizable = true;
-  export let showControls = true;
+  let {
+    url = '',
+    serverName = '',
+    title = '',
+    viewMode = 'normal', // 'normal', 'compact', 'fullscreen', 'mini'
+    width = '100%',
+    height = '100%',
+    minWidth = 400,
+    minHeight = 300,
+    resizable = true,
+    showControls = true,
+    onready = () => {},
+    onnavigate = () => {},
+    'onstate-update': onstateUpdate = () => {},
+    'onresize-request': onresizeRequest = () => {},
+    onmessage = () => {}
+  } = $props();
   
   // Add timestamp to URL to bypass cache
-  $: urlWithTimestamp = url ? `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}` : '';
-  
-  const dispatch = createEventDispatcher();
+  let urlWithTimestamp = $derived(url ? `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}` : '');
   
   let webviewElement;
   let containerElement;
@@ -31,16 +36,16 @@
     mini: { zoom: 0.6, controls: true } // Keep minimal controls in mini mode
   };
   
-  $: {
+  $effect(() => {
     // Apply view mode configuration
     if (viewMode && viewModeConfigs[viewMode]) {
       const config = viewModeConfigs[viewMode];
       setZoom(config.zoom);
       showControls = config.controls;
     }
-  }
+  });
   
-  let hasInitiallyLoaded = false;
+  let hasInitiallyLoaded = $state(false);
   
   onMount(() => {
     if (!webviewElement) return;
@@ -110,7 +115,7 @@
         ` : ''}
       `);
       
-      dispatch('ready');
+      onready();
     });
     
     // Handle console messages from webview
@@ -126,7 +131,7 @@
     
     // Handle navigation
     webviewElement.addEventListener('will-navigate', (event) => {
-      dispatch('navigate', { url: event.url });
+      onnavigate({ detail: { url: event.url } });
     });
     
     // Handle page errors
@@ -177,17 +182,17 @@
         // Handle resize requests from the web page
         if (args[0] && resizable) {
           const { width: reqWidth, height: reqHeight } = args[0];
-          dispatch('resize-request', { width: reqWidth, height: reqHeight });
+          onresizeRequest({ detail: { width: reqWidth, height: reqHeight } });
         }
         break;
         
       case 'state-update':
         // Forward state updates
-        dispatch('state-update', args[0]);
+        onstateUpdate({ detail: args[0] });
         break;
         
       default:
-        dispatch('message', { channel, args });
+        onmessage({ detail: { channel, args } });
     }
   }
   
@@ -248,29 +253,29 @@
       <div class="controls-right">
         {#if viewMode === 'mini'}
           <!-- Minimal controls for mini mode -->
-          <button on:click={() => setViewMode('compact')} title="Compact">□</button>
-          <button on:click={() => setViewMode('normal')} title="Normal">◱</button>
+          <button onclick={() => setViewMode('compact')} title="Compact">□</button>
+          <button onclick={() => setViewMode('normal')} title="Normal">◱</button>
         {:else if viewMode === 'compact'}
           <!-- Compact controls -->
-          <button on:click={() => setViewMode('mini')} title="Mini">◿</button>
-          <button on:click={() => setViewMode('normal')} title="Normal">◱</button>
-          <button on:click={toggleFullscreen} title="Fullscreen">⛶</button>
+          <button onclick={() => setViewMode('mini')} title="Mini">◿</button>
+          <button onclick={() => setViewMode('normal')} title="Normal">◱</button>
+          <button onclick={toggleFullscreen} title="Fullscreen">⛶</button>
         {:else}
           <!-- Full controls for normal mode -->
-          <button on:click={() => setViewMode('mini')} class:active={viewMode === 'mini'}>
+          <button onclick={() => setViewMode('mini')} class:active={viewMode === 'mini'}>
             Mini
           </button>
-          <button on:click={() => setViewMode('compact')} class:active={viewMode === 'compact'}>
+          <button onclick={() => setViewMode('compact')} class:active={viewMode === 'compact'}>
             Compact
           </button>
-          <button on:click={() => setViewMode('normal')} class:active={viewMode === 'normal'}>
+          <button onclick={() => setViewMode('normal')} class:active={viewMode === 'normal'}>
             Normal
           </button>
-          <button on:click={toggleFullscreen}>
+          <button onclick={toggleFullscreen}>
             {viewMode === 'fullscreen' ? 'Exit Fullscreen' : 'Fullscreen'}
           </button>
         {/if}
-        <button on:click={reload} title="Reload">↻</button>
+        <button onclick={reload} title="Reload">↻</button>
       </div>
     </div>
   {/if}

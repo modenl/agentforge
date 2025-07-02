@@ -14,10 +14,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const duration = Date.now() - startTime;
 
       console.log('🌉 [PRELOAD] 收到响应 |', `耗时: ${duration}ms | 成功: ${result?.success} | 消息: ${result?.message?.length || 0}字 | 卡片: ${!!result?.adaptive_card}`);
+      console.log('🌉 [PRELOAD] 完整响应:', JSON.stringify(result, null, 2));
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;
       console.error('🌉 [PRELOAD] ❌ 失败 |', `耗时: ${duration}ms | 错误: ${error.message}`);
+      console.error('🌉 [PRELOAD] 错误详情:', error);
       throw error;
     }
   },
@@ -46,7 +48,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.removeAllListeners(`stream-chunk-${listenerId}`);
       }
 
-      // console.log('🌊 [PRELOAD] 流式完成 |', `耗时: ${duration}ms | 成功: ${result?.success} | 消息: ${result?.message?.length || 0}字`);
+      console.log('🌊 [PRELOAD] 流式完成，收到结果:', {
+        success: result?.success,
+        hasMessage: !!result?.message,
+        messageLength: result?.message?.length || 0,
+        messagePreview: result?.message ? result.message.substring(0, 50) + '...' : 'NO MESSAGE',
+        hasAdaptiveCard: !!result?.adaptive_card
+      });
+      
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;

@@ -525,7 +525,7 @@ welcome (欢迎页)
 4. **避免在 global card 中放置当前交互相关的操作**
 
 **示例1：故事浏览（LLM 自主功能）**
-```json
+```jsonc
 // ✅ 正确：这些都是 LLM 可以自主完成的
 "assist": {
   "actions": [
@@ -538,7 +538,7 @@ welcome (欢迎页)
 
 **示例2：棋局回放（需要 MCP 工具）**
 由于 MCP 工具中没有控制回放的 prev/next/pause 功能，不应生成这些按钮：
-```json
+```jsonc
 // ❌ 错误：生成了工具不支持的功能
 "actions": [
   {"type": "Action.Submit", "title": "⏮ 上一步", "data": {"action": "replay_prev"}},
@@ -829,7 +829,7 @@ Assist Card:
 - 不要在每个回复中都包含 global card
 
 **示例**：
-```json
+```jsonc
 // 多数情况的正确做法
 "adaptive_card": {
   "global": {},  // 保持为空

@@ -4,6 +4,7 @@
 const { createAIClient } = require('./ai-client-factory');
 const path = require('path');
 const fs = require('fs').promises;
+const JsonRepairUtil = require('../utils/json-repair');
 
 class CoreAgent {
   constructor(config = {}) {
@@ -256,25 +257,17 @@ class CoreAgent {
 
   cleanJsonString(jsonString) {
     try {
-      // 首先尝试直接解析
-      const trimmed = jsonString.trim();
-      JSON.parse(trimmed);
-      return trimmed;
-    } catch (error) {
-      // 如果失败，进行更激进的清理
-      // 1. 移除所有换行、回车、制表符
+      // Use JsonRepairUtil for robust JSON parsing
+      const result = JsonRepairUtil.tryRepairAndValidate(jsonString);
+      if (result.success) {
+        return result.repaired;
+      }
+      
+      // Fallback to basic cleaning if repair fails
       let cleaned = jsonString.replace(/[\r\n\t]/g, ' ');
-      
-      // 2. 移除所有不可见字符和控制字符（保留中文和全角符号）
       cleaned = cleaned.replace(/[^\x20-\x7E\u4e00-\u9fff\uff00-\uffef]/g, '');
+      cleaned = cleaned.replace(/\s+/g, ' ').trim();
       
-      // 3. 移除多余的空格
-      cleaned = cleaned.replace(/\s+/g, ' ');
-      
-      // 4. 去除首尾空白
-      cleaned = cleaned.trim();
-      
-      // 5. 尝试找到JSON的开始和结束
       const firstBrace = cleaned.indexOf('{');
       const lastBrace = cleaned.lastIndexOf('}');
       
@@ -283,6 +276,9 @@ class CoreAgent {
       }
       
       return cleaned;
+    } catch (error) {
+      console.error('❌ [JSON_CLEAN] Failed to clean JSON:', error.message);
+      return jsonString;
     }
   }
 
@@ -328,10 +324,22 @@ class CoreAgent {
   parseResponse(aiResponse, originalInput) {
     try {
       // 提取用户可见的消息部分
-      const visibleMessage = this.extractVisibleMessage(aiResponse);
+      let visibleMessage = this.extractVisibleMessage(aiResponse);
 
-      // 查找SYSTEMOUTPUT标记
-      const systemOutputMatch = aiResponse.match(/<<<SYSTEMOUTPUT>>>([\s\S]*?)<<<SYSTEMOUTPUT>>>/);
+      // 查找SYSTEMOUTPUT标记 - 先尝试标准格式，然后尝试从消息中提取
+      let systemOutputMatch = aiResponse.match(/<<<SYSTEMOUTPUT>>>([\s\S]*?)<<<SYSTEMOUTPUT>>>/);
+      
+      // 如果标准格式没找到，尝试从消息内部提取（处理AI错误格式化的情况）
+      if (!systemOutputMatch) {
+        // 检查是否在消息中包含了SYSTEMOUTPUT
+        const messageMatch = aiResponse.match(/<<<SYSTEMOUTPUT>>>([\s\S]*?)(?:<<<SYSTEMOUTPUT>>>|$)/);
+        if (messageMatch) {
+          console.warn('⚠️ [PARSE] SYSTEMOUTPUT嵌入在消息中，尝试提取...');
+          systemOutputMatch = messageMatch;
+          // 重新提取可见消息，确保移除嵌入的SYSTEMOUTPUT
+          visibleMessage = this.extractVisibleMessage(aiResponse);
+        }
+      }
 
       if (!systemOutputMatch) {
         console.warn('⚠️ [PARSE] 未找到SYSTEMOUTPUT标记，返回基础响应');
@@ -350,22 +358,41 @@ class CoreAgent {
 
       let systemOutput;
       try {
-        systemOutput = JSON.parse(cleanJson);
+        systemOutput = JsonRepairUtil.parse(cleanJson, {
+          fallbackValue: null,
+          description: 'System output from LLM'
+        });
       } catch (parseError) {
         console.error('❌ [PARSE] JSON解析失败:', parseError);
+        console.error('❌ [PARSE] 解析错误详情:', parseError.message);
         console.error('原始JSON长度:', rawJson.length);
-        console.error('原始JSON:', rawJson);
+        console.error('原始JSON内容:');
+        console.error('=' .repeat(80));
+        console.error(rawJson);
+        console.error('=' .repeat(80));
         console.error('清理后JSON长度:', cleanJson.length);
-        console.error('清理后JSON:', cleanJson);
+        console.error('清理后JSON内容:');
+        console.error('=' .repeat(80));
+        console.error(cleanJson);
+        console.error('=' .repeat(80));
+        
+        // 尝试找出具体的错误位置
+        const errorMatch = parseError.message.match(/position (\d+)/);
+        if (errorMatch) {
+          const position = parseInt(errorMatch[1]);
+          console.error(`❌ [PARSE] 错误位置 ${position} 附近的内容:`);
+          const start = Math.max(0, position - 50);
+          const end = Math.min(cleanJson.length, position + 50);
+          console.error(cleanJson.substring(start, end));
+          console.error(' '.repeat(position - start) + '^--- 错误位置');
+        }
+        
         // 显示JSON末尾的字符
         if (cleanJson.length > 400) {
           console.error('JSON末尾100字符:', cleanJson.slice(-100));
         }
-        // 显示位置442附近的字符
-        if (cleanJson.length > 442) {
-          console.error('位置442附近的字符:', cleanJson.slice(437, 447));
-        }
-        return this.getErrorResponse(new Error('Invalid JSON in SYSTEMOUTPUT'));
+        
+        return this.getErrorResponse(new Error('Invalid JSON in SYSTEMOUTPUT: ' + parseError.message));
       }
 
       // 更新当前变量
@@ -383,7 +410,6 @@ class CoreAgent {
       // Validate and log mcp_tools if present
       let mcpTools = systemOutput.mcp_tools || [];
       if (mcpTools.length > 0) {
-        console.log('🔧 [MCP] Raw mcp_tools from LLM:', JSON.stringify(mcpTools, null, 2));
         
         // Validate each tool
         const validTools = [];
@@ -406,10 +432,10 @@ class CoreAgent {
           });
         }
         
-        console.log(`✅ [MCP] ${validTools.length} valid tools, ${invalidTools.length} invalid tools`);
         mcpTools = validTools;
       }
 
+      
       return {
         success: true,
         message: visibleMessage,
@@ -470,7 +496,21 @@ class CoreAgent {
 
   extractVisibleMessage(aiResponse) {
     // 移除SYSTEMOUTPUT部分，只保留用户可见内容
-    const visibleContent = aiResponse.replace(/<<<SYSTEMOUTPUT>>>[\s\S]*?<<<SYSTEMOUTPUT>>>/g, '').trim();
+    // 支持两种格式：
+    // 1. 标准格式：<<<SYSTEMOUTPUT>>>...<<<SYSTEMOUTPUT>>>
+    // 2. 简化格式：<<<SYSTEMOUTPUT>>>...（到字符串结尾）
+    let visibleContent = aiResponse
+      .replace(/<<<SYSTEMOUTPUT>>>[\s\S]*?<<<SYSTEMOUTPUT>>>/g, '') // 标准格式
+      .replace(/<<<SYSTEMOUTPUT>>>[\s\S]*$/g, '') // 简化格式（到结尾）
+      .trim();
+    
+    
+    // 如果提取后的内容仍然包含SYSTEMOUTPUT，说明格式有问题
+    if (visibleContent.includes('<<<SYSTEMOUTPUT>>>')) {
+      console.warn('⚠️ [extractVisibleMessage] 提取后仍包含SYSTEMOUTPUT标记');
+      // 再次尝试清理
+      visibleContent = visibleContent.split('<<<SYSTEMOUTPUT>>>')[0].trim();
+    }
 
     // 修复可能的SVG转义问题
     const fixedContent = this.fixSvgEscaping(visibleContent);
