@@ -19,6 +19,10 @@ coverage/
 dist/
 build/
 src/renderer/bundle/
+framework/renderer/bundle/
+**/bundle.js
+**/bundle.js.map
+**/bundle.css
 
 # OS generated files
 .DS_Store
