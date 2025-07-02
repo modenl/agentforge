@@ -8,14 +8,20 @@ const fs = require('fs');
 // Load environment variables
 require('dotenv').config();
 
-console.log('�� Launcher.js loaded');
+// Hide dock icon in test mode on macOS (must be set very early)
+if (process.env.NODE_ENV === 'test' && process.platform === 'darwin') {
+  if (process.env.HEADED !== '1' && process.env.SHOW_TEST_WINDOW !== 'true') {
+    // This makes the app behave like a background agent
+    app.setActivationPolicy('accessory');
+  }
+}
+
 
 // Import framework components
 const AppManager = require('./core/app-manager');
 const { mergeConfig, validateConfig } = require('./config/framework-config');
 const logger = require('./core/logger');
 
-console.log('📦 Required modules loaded');
 
 /**
  * Universal App Launcher
@@ -23,7 +29,6 @@ console.log('📦 Required modules loaded');
  */
 class UniversalLauncher {
   constructor(appPath) {
-    console.log(`🏗️ UniversalLauncher constructor called with appPath: ${appPath}`);
 
     this.appPath = appPath;
     this.appName = path.basename(appPath);
@@ -31,14 +36,12 @@ class UniversalLauncher {
     this.isInitialized = false;
     this.isShuttingDown = false;
 
-    console.log(`📝 App name: ${this.appName}`);
   }
 
   /**
    * Load app configuration
    */
   loadConfig() {
-    console.log('⚙️ Loading config...');
 
     const configPath = path.join(this.appPath, 'config.js');
     if (!fs.existsSync(configPath)) {
@@ -53,11 +56,8 @@ class UniversalLauncher {
     const mcpConfig = this.loadMCPConfig();
     if (mcpConfig && mcpConfig.mcpServers) {
       config.mcpServers = mcpConfig.mcpServers;
-      console.log(`✅ MCP config merged: ${Object.keys(mcpConfig.mcpServers).length} servers`);
     }
 
-    console.log(`✅ Config loaded from: ${configPath}`);
-    console.log(`🏷️ Config appName: "${config.appName}"`);
     return config;
   }
 
@@ -68,14 +68,12 @@ class UniversalLauncher {
     const mcpConfigPath = path.join(this.appPath, 'mcp.json');
 
     if (!fs.existsSync(mcpConfigPath)) {
-      console.log(`📋 No separate MCP config found: ${mcpConfigPath}`);
       return null;
     }
 
     try {
       const mcpConfigContent = fs.readFileSync(mcpConfigPath, 'utf8');
       const mcpConfig = JSON.parse(mcpConfigContent);
-      console.log(`✅ MCP config loaded from: ${mcpConfigPath}`);
       return mcpConfig;
     } catch (error) {
       console.error(`❌ Failed to load MCP config from ${mcpConfigPath}:`, error);
@@ -87,7 +85,6 @@ class UniversalLauncher {
    * Load business prompt
    */
   loadBusinessPrompt() {
-    console.log('📄 Loading business prompt...');
 
     // Load config to get the prompt file name
     const config = this.loadConfig();
@@ -103,9 +100,7 @@ class UniversalLauncher {
       const promptPath = path.join(this.appPath, fileName);
       if (fs.existsSync(promptPath)) {
         const content = fs.readFileSync(promptPath, 'utf8');
-        console.log(`✅ Prompt loaded from: ${promptPath} (${content.length} chars)`);
         if (configuredPromptFile && fileName === configuredPromptFile) {
-          console.log(`📋 Using configured prompt file: ${configuredPromptFile}`);
         }
         return content;
       }
@@ -214,46 +209,29 @@ class UniversalLauncher {
    */
   async initialize() {
     try {
-      console.log('🚀 Starting app initialization...');
+
 
       // Create dynamic plugin
       const AppPluginClass = this.createAppPlugin();
       const appPlugin = new AppPluginClass(null); // Will be properly initialized by AppManager
       const finalConfig = appPlugin.getConfig();
 
-      console.log(`📋 App config: ${JSON.stringify({
-        appName: finalConfig.appName,
-        windowSize: `${finalConfig.window.defaultWidth}x${finalConfig.window.defaultHeight}`,
-        uiPath: finalConfig.window.uiPath
-      }, null, 2)}`);
 
       // Add the plugin to config
       finalConfig.plugins = [AppPluginClass];
 
       // Validate configuration
       validateConfig(finalConfig);
-      console.log('✅ Config validation passed');
-
       // Create and initialize the application manager
-      console.log('🏗️ Creating AppManager...');
-      console.log('📋 Passing to AppManager - appName:', finalConfig.appName);
       this.appManager = new AppManager(finalConfig);
 
-      console.log('⚡ Initializing AppManager...');
       await this.appManager.initialize();
 
       // Create the main window
-      console.log('🪟 Creating main window...');
       const window = await this.appManager.createMainWindow();
-
-      if (window) {
-        console.log('✅ Main window created successfully');
-      } else {
-        console.log('⚠️ Window creation returned null (possibly non-Electron environment)');
-      }
-
+      
       this.isInitialized = true;
-      console.log(`🎉 ${appPlugin.name} launched successfully`);
+
 
       return true;
     } catch (error) {
@@ -292,25 +270,20 @@ class UniversalLauncher {
  * @returns {UniversalLauncher} Launcher instance
  */
 function launchApp(appPath) {
-  console.log('🚀 launchApp function called');
-  console.log(`📥 Received appPath: ${appPath}`);
 
   // Get app path from command line arguments if not provided
   if (!appPath) {
     const args = process.argv.slice(2);
-    console.log(`📋 Command line args: ${JSON.stringify(args)}`);
 
     if (args.length === 0) {
       throw new Error('No app path specified. Usage: electron . <app-path>');
     }
     appPath = args[0];
-    console.log(`📂 Using appPath from args: ${appPath}`);
   }
 
   // Resolve relative paths
   if (!path.isAbsolute(appPath)) {
     appPath = path.resolve(appPath);
-    console.log(`🔗 Resolved absolute path: ${appPath}`);
   }
 
   // Check if app directory exists
@@ -318,28 +291,42 @@ function launchApp(appPath) {
     console.error(`❌ App directory not found: ${appPath}`);
     throw new Error(`App directory not found: ${appPath}`);
   }
-  console.log(`✅ App directory exists: ${appPath}`);
 
   // Create launcher instance
-  console.log('🏗️ Creating launcher instance...');
   const launcher = new UniversalLauncher(appPath);
 
   // Set up Electron app event handlers
-  console.log('⚡ Setting up Electron event handlers...');
+
+  // Hide from dock BEFORE app is ready in test mode on macOS
+  if (process.env.NODE_ENV === 'test' && process.platform === 'darwin') {
+    if (process.env.HEADED !== '1' && process.env.SHOW_TEST_WINDOW !== 'true') {
+      // Immediately hide dock if available
+      if (app.dock) {
+        app.dock.hide();
+      }
+    }
+  }
+  
+  // Also handle the 'will-finish-launching' event
+  app.on('will-finish-launching', () => {
+    if (process.env.NODE_ENV === 'test' && process.platform === 'darwin') {
+      if (process.env.HEADED !== '1' && process.env.SHOW_TEST_WINDOW !== 'true') {
+        app.dock?.hide();
+      }
+    }
+  });
 
   app.whenReady().then(async() => {
-    console.log('🚀 Electron app is ready, starting initialization...');
+    
     await launcher.initialize();
   });
 
   app.on('window-all-closed', () => {
-    console.log('🪟 All windows closed');
     // On macOS, keep the app running even when all windows are closed
     if (process.platform !== 'darwin') {
       // Set a timeout to prevent hanging on quit
       setTimeout(() => {
         if (!launcher.isShuttingDown) {
-          console.log('⏰ Force quitting after window close');
           process.exit(0);
         }
       }, 1000);
@@ -348,7 +335,6 @@ function launchApp(appPath) {
   });
 
   app.on('activate', async() => {
-    console.log('🔄 App activated');
     // On macOS, re-create window when dock icon is clicked
     if (launcher.isInitialized && launcher.appManager) {
       const windows = launcher.appManager.mainWindow;
@@ -359,7 +345,6 @@ function launchApp(appPath) {
   });
 
   app.on('before-quit', async(event) => {
-    console.log('🛑 App about to quit');
     // Prevent quit until cleanup is complete
     if (launcher.isInitialized && !launcher.isShuttingDown) {
       event.preventDefault();
@@ -367,13 +352,11 @@ function launchApp(appPath) {
 
       // Set a timeout to prevent hanging
       const cleanupTimeout = setTimeout(() => {
-        console.log('⏰ Cleanup timeout, forcing quit');
         process.exit(0);
       }, 3000);
 
       try {
         await launcher.shutdown();
-        console.log('✅ Cleanup completed');
         clearTimeout(cleanupTimeout);
         // Don't call app.quit() again, just exit the process
         process.exit(0);
@@ -403,7 +386,6 @@ function launchApp(appPath) {
     logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
   });
 
-  console.log('✅ Event handlers set up, returning launcher');
   return launcher;
 }
 
@@ -413,11 +395,6 @@ module.exports = {
 };
 
 // Auto-launch if this file is run directly
-console.log('🔍 Checking if this is the main module...');
-console.log(`require.main === module: ${require.main === module}`);
-console.log(`require.main.filename: ${require.main ? require.main.filename : 'undefined'}`);
-console.log(`module.filename: ${module.filename}`);
 
 // Since Electron loads files differently, we'll launch regardless
-console.log('🚀 Launching app regardless of main module check...');
 launchApp();

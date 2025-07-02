@@ -1,3 +1,4 @@
+import { mount } from 'svelte';
 import App from './App.svelte';
 
 console.log('🔧 Svelte main.js loaded');
@@ -14,7 +15,7 @@ function initSvelteApp() {
 
   try {
     console.log('🔧 Creating Svelte app...');
-    const app = new App({
+    const app = mount(App, {
       target: target
     });
     console.log('✅ Svelte app created successfully');
@@ -32,10 +33,14 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     console.log('🔧 DOM loaded, initializing Svelte app');
     app = initSvelteApp();
+    // Make app available globally for debugging
+    window.svelteApp = app;
   });
 } else {
   console.log('🔧 DOM already ready, initializing Svelte app');
   app = initSvelteApp();
+  // Make app available globally for debugging
+  window.svelteApp = app;
 }
 
 export default app; 

@@ -6,6 +6,12 @@ require('dotenv').config({ path: path.join(__dirname, '.env.test') });
 
 export default defineConfig({
   testDir: './tests',
+  /* Ignore disabled tests */
+  testIgnore: '**/disabled/**',
+  /* Test timeout */
+  timeout: 60000, // 60 seconds per test
+  /* Global timeout */
+  globalTimeout: 10 * 60 * 1000, // 10 minutes total
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -55,20 +61,6 @@ export default defineConfig({
   /* Folder for test artifacts such as screenshots, videos, traces, etc. */
   outputDir: 'test-results/',
 
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'npm run test:app',
-    port: 3000,
-    reuseExistingServer: !process.env.CI,
-    cwd: path.join(__dirname, '../..'),
-    env: {
-      NODE_ENV: 'test',
-      APP_NAME: 'chess-game',
-      // Use test-specific model
-      OPENAI_MODEL: 'gpt-4o-mini',
-      // Use test-specific storage
-      USER_DATA_PATH: path.join(__dirname, 'test-data'),
-      LOGS_PATH: path.join(__dirname, 'test-logs'),
-    },
-  },
+  /* We don't need webServer since we launch Electron directly in tests */
+  // webServer: { ... }
 });

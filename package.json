@@ -2,16 +2,17 @@
   "name": "children-game-time-manager",
   "version": "1.0.0",
   "description": "A child game time management desktop application",
-  "main": "framework/index.js",
+  "main": "framework/launcher.js",
   "scripts": {
     "start": "node scripts/start-app.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "test:app": "NODE_ENV=test node scripts/start-app.js chess-game",
     "test:e2e": "cd tests/e2e && npm test",
     "test:e2e:headed": "cd tests/e2e && npm run test:headed",
     "test:e2e:debug": "cd tests/e2e && npm run test:debug",
     "test:e2e:install": "cd tests/e2e && npm install && npx playwright install",
-    "build": "cd framework/renderer/svelte && npm run build",
+    "build": "rollup -c --environment BUILD:production",
+    "build:rollup": "rollup -c --environment BUILD:production",
+    "build:dev": "rollup -c",
     "dev": "cd framework/renderer/svelte && npm run dev",
     "dev:smart": "node scripts/smart-build.js",
     "setup": "npm install && npm run build",
@@ -23,7 +24,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",
     "@supabase/supabase-js": "^2.39.0",
-    "adaptivecards": "^3.0.7",
+    "adaptivecards": "^3.0.5",
+    "adaptivecards-templating": "^2.3.1",
     "auto-launch": "^5.0.6",
     "chalk": "^4.1.2",
     "chokidar": "^3.5.3",
@@ -33,6 +35,7 @@
     "electron-store": "^8.1.0",
     "highlight.js": "^11.9.0",
     "jsdom": "^23.0.1",
+    "jsonrepair": "^3.12.0",
     "marked": "^11.0.0",
     "openai": "^4.20.1",
     "puppeteer": "^21.6.0",
@@ -43,6 +46,14 @@
     "yargs": "^17.7.2"
   },
   "devDependencies": {
-    "electron-builder": "^24.9.1"
+    "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-terser": "^0.4.4",
+    "electron-builder": "^24.9.1",
+    "rollup": "^4.44.1",
+    "rollup-plugin-css-only": "^4.5.2",
+    "rollup-plugin-svelte": "^7.2.2",
+    "svelte": "^5.34.9"
   }
 }

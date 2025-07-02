@@ -3,6 +3,7 @@
 
 const { EventEmitter } = require('events');
 const { spawn } = require('child_process');
+const JsonRepairUtil = require('../utils/json-repair');
 
 /**
  * MCP Client implementing Model Context Protocol specification 2025-03-26
@@ -135,7 +136,11 @@ class MCPClient extends EventEmitter {
               this.logger.debug(`MCP server stdout (non-JSON): ${trimmedLine}`);
               continue;
             }
-            const message = JSON.parse(trimmedLine);
+            const message = JsonRepairUtil.parse(trimmedLine, {
+              fallbackValue: null,
+              logErrors: false,
+              description: 'MCP server JSON-RPC message'
+            });
             this.handleMessage(message);
           } catch (error) {
             this.logger.error('Failed to parse JSON-RPC message:', error.message);

@@ -1,25 +1,38 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
+  import JsonRepairUtil from '../utils/json-repair-browser.js';
 
-  export let cards = [];
-  export let compact = false;
-
-  const dispatch = createEventDispatcher();
+  let { 
+    cards = [], 
+    compact = false,
+    oncardAction = () => {}
+  } = $props();
+  
+  console.log('[AdaptiveCardPanel] Component created with cards:', cards);
 
   let cardContainer;
   let AdaptiveCards;
   let Template;
-  let isLibraryLoaded = false;
+  let isLibraryLoaded = $state(false);
   let globalHostConfig;
 
   onMount(async() => {
+    console.log('[AdaptiveCardPanel] onMount started');
     try {
       // 动态导入 AdaptiveCards 库
+      console.log('[AdaptiveCardPanel] Attempting to import adaptivecards...');
       const adaptiveCardsModule = await import('adaptivecards');
+      console.log('[AdaptiveCardPanel] adaptivecards imported:', adaptiveCardsModule);
+      
+      console.log('[AdaptiveCardPanel] Attempting to import adaptivecards-templating...');
       const templatingModule = await import('adaptivecards-templating');
+      console.log('[AdaptiveCardPanel] adaptivecards-templating imported:', templatingModule);
 
       AdaptiveCards = adaptiveCardsModule.default || adaptiveCardsModule;
       Template = templatingModule.Template;
+      
+      // Make AdaptiveCards available globally for testing
+      window.AdaptiveCards = AdaptiveCards;
 
       // 初始化 AdaptiveCards 全局设置
       AdaptiveCards.GlobalSettings.setTabIndexAtCardRoot = false;
@@ -32,12 +45,13 @@
       registerCustomElements();
 
       isLibraryLoaded = true;
-      console.log('AdaptiveCards library loaded successfully');
+      console.log('[AdaptiveCardPanel] AdaptiveCards library loaded successfully');
 
       // 重新渲染现有卡片
       renderAllCards();
     } catch (error) {
-      console.error('Failed to load AdaptiveCards library:', error);
+      console.error('[AdaptiveCardPanel] Failed to load AdaptiveCards library:', error);
+      console.error('[AdaptiveCardPanel] Error stack:', error.stack);
       isLibraryLoaded = false;
     }
   });
@@ -254,10 +268,8 @@
       // 解析卡片数据
       let cardPayload;
       if (typeof cardData === 'string') {
-        try {
-          cardPayload = JSON.parse(cardData);
-        } catch (e) {
-          cardPayload = {
+        cardPayload = JsonRepairUtil.parse(cardData, {
+          fallbackValue: {
             type: 'AdaptiveCard',
             version: '1.6',
             body: [
@@ -267,14 +279,13 @@
                 wrap: true
               }
             ]
-          };
-        }
+          },
+          description: 'Adaptive card data'
+        });
       } else if (cardData.content) {
         if (typeof cardData.content === 'string') {
-          try {
-            cardPayload = JSON.parse(cardData.content);
-          } catch (e) {
-            cardPayload = {
+          cardPayload = JsonRepairUtil.parse(cardData.content, {
+            fallbackValue: {
               type: 'AdaptiveCard',
               version: '1.6',
               body: [
@@ -284,8 +295,9 @@
                   wrap: true
                 }
               ]
-            };
-          }
+            },
+            description: 'Adaptive card content'
+          });
         } else {
           cardPayload = cardData.content;
         }
@@ -443,24 +455,36 @@
   }
 
   // 防抖机制：防止短时间内重复触发
-  let lastActionTime = 0;
-  let lastActionId = '';
+  let lastActionTime = $state(0);
+  let lastActionId = $state('');
   const DEBOUNCE_TIME = 1000; // 1秒防抖
 
   function handleCardAction(action) {
     // 直接处理动作，不显示视觉反馈
     try {
-      dispatch('cardAction', {
-        cardId: action.cardId || 'unknown',
-        action: action
+      console.log('[AdaptiveCardPanel] handleCardAction called with:', action);
+      oncardAction({
+        detail: {
+          cardId: action.cardId || 'unknown',
+          action: action
+        }
       });
+      console.log('[AdaptiveCardPanel] oncardAction callback invoked');
     } catch (error) {
-      console.error('Error dispatching cardAction:', error);
+      console.error('Error calling oncardAction:', error);
     }
   }
 
   function renderAllCards() {
+    console.log('[renderAllCards] Called with:', {
+      hasContainer: !!cardContainer,
+      isLibraryLoaded,
+      cardsLength: cards?.length,
+      cards
+    });
+    
     if (!cardContainer || !isLibraryLoaded) {
+      console.log('[renderAllCards] Early return - missing container or library not loaded');
       return;
     }
 
@@ -470,18 +494,36 @@
     cardContainer.innerHTML = '';
 
     // 渲染所有卡片
-    cards.forEach((cardData, index) => {
-      const renderedCard = renderCard(cardData);
-      if (renderedCard) {
-        cardContainer.appendChild(renderedCard);
-      }
-    });
+    if (cards && cards.length > 0) {
+      cards.forEach((cardData, index) => {
+        console.log(`[renderAllCards] Rendering card ${index}:`, cardData);
+        const renderedCard = renderCard(cardData);
+        if (renderedCard) {
+          cardContainer.appendChild(renderedCard);
+          console.log(`[renderAllCards] Card ${index} appended to container`);
+        } else {
+          console.log(`[renderAllCards] Card ${index} failed to render`);
+        }
+      });
+    } else {
+      console.log('[renderAllCards] No cards to render');
+    }
   }
 
   // 响应式更新卡片 - 明确依赖 cards 数组
-  $: if (isLibraryLoaded && cardContainer && cards) {
-    renderAllCards();
-  }
+  $effect(() => {
+    // Log for debugging
+    console.log('[AdaptiveCardPanel] Effect triggered:', {
+      isLibraryLoaded,
+      hasContainer: !!cardContainer,
+      cardsLength: cards?.length,
+      cards
+    });
+    
+    if (isLibraryLoaded && cardContainer) {
+      renderAllCards();
+    }
+  });
 </script>
 
 <div class="adaptive-card-panel" bind:this={cardContainer}>

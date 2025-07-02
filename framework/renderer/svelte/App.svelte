@@ -6,9 +6,9 @@
   import MCPView from './components/MCPView.svelte';
 
   // 全局应用状态（非聊天状态）
-  let electronAPI = null;
-  let currentState = null;
-  let appName = '';
+  let electronAPI = $state(null);
+  let currentState = $state(null);
+  let appName = $state('');
   
   
   // Create an interval to check for window.appName
@@ -31,22 +31,22 @@
   }
 
   // 双卡片架构
-  let globalCard = null;
-  let inputAssistCard = null;
+  let globalCard = $state(null);
+  let inputAssistCard = $state(null);
   
   // MCP View 相关状态
-  let showMCPView = false;
-  let mcpUrl = '';
-  let mcpTitle = '';
-  let mcpServerName = '';
-  let hasReceivedMCPUrl = false; // Track if we've received a URL from MCP server
-  let mcpViewMode = 'compact'; // 'normal', 'compact', 'fullscreen', 'mini' - default to compact
-  let mcpViewComponent = null;
+  let showMCPView = $state(false);
+  let mcpUrl = $state('');
+  let mcpTitle = $state('');
+  let mcpServerName = $state('');
+  let hasReceivedMCPUrl = $state(false); // Track if we've received a URL from MCP server
+  let mcpViewMode = $state('compact'); // 'normal', 'compact', 'fullscreen', 'mini' - default to compact
+  let mcpViewComponent = $state(null);
   
   // 分隔器拖动相关
-  let splitPosition = 65; // 默认聊天区域占65%
-  let isDragging = false;
-  let containerWidth = 0;
+  let splitPosition = $state(65); // 默认聊天区域占65%
+  let isDragging = $state(false);
+  let containerWidth = $state(0);
   const MIN_CHAT_WIDTH = 400; // 聊天窗口最小宽度
   const MIN_CARD_WIDTH = 350; // 卡片区域最小宽度
   const MIN_MCP_VIEW_WIDTH = 600; // MCP View最小宽度
@@ -283,6 +283,7 @@
 
   // 处理来自ChatWindow的状态更新事件
   function handleStateUpdate(event) {
+    console.log('🎯 App.svelte handleStateUpdate called with:', event.detail);
     const { newState, adaptiveCard } = event.detail;
 
     if (newState) {
@@ -290,6 +291,7 @@
     }
 
     if (adaptiveCard) {
+      console.log('🎯 App.svelte calling updateGlobalCard with:', adaptiveCard);
       updateGlobalCard(adaptiveCard);
     }
   }
@@ -373,8 +375,9 @@
 
   // 处理Adaptive Card按钮点击
   function handleAdaptiveCardAction(event) {
+    console.log('🎯 App.svelte handleAdaptiveCardAction called with:', event);
     const eventData = event.detail;
-    console.log('🎯 Adaptive Card Event:', eventData);
+    console.log('🎯 Adaptive Card Event detail:', eventData);
 
     // 从事件中提取action数据
     const actionData = eventData.action;
@@ -401,7 +404,7 @@
   }
 
   // Make status text reactive
-  $: statusText = (() => {
+  let statusText = $derived((() => {
     const currentAppName = appName || window.appName || '';
     console.log('[statusText reactive] appName=', appName, 'window.appName=', window.appName, 'using:', currentAppName);
     
@@ -410,7 +413,7 @@
     
     // Just return the app name - let each app decide what additional info to show
     return currentAppName;
-  })();
+  })());
   
   // 处理窗口大小变化
   function handleResize() {
@@ -527,16 +530,16 @@
     <div class="chat-section" style="flex: 0 0 {splitPosition}%">
       <ChatWindow
         bind:this={chatWindowComponent}
-        on:stateUpdate={handleStateUpdate}
+        onstateUpdate={handleStateUpdate}
         {inputAssistCard}
-        on:inputAssistAction={handleInputAssistAction}
+        oninputAssistAction={handleInputAssistAction}
       />
     </div>
     
     <!-- 分隔器 -->
     <div 
       class="splitter {isDragging ? 'dragging' : ''}"
-      on:mousedown|preventDefault={handleSplitterMouseDown}
+      onmousedown={(e) => { e.preventDefault(); handleSplitterMouseDown(e); }}
       role="separator"
       aria-orientation="vertical"
     >
@@ -547,9 +550,13 @@
     <div class="card-section" style="flex: 0 0 calc({100 - splitPosition}% - 6px)">
         {#if globalCard}
           <div class="global-card-container">
+            {#snippet cardDebug()}
+              {console.log('[App.svelte] Rendering AdaptiveCardPanel with globalCard:', globalCard)}
+            {/snippet}
+            {@render cardDebug()}
             <AdaptiveCardPanel
               cards={[globalCard]}
-              on:cardAction={handleAdaptiveCardAction}
+              oncardAction={handleAdaptiveCardAction}
             />
           </div>
         {/if}
@@ -561,10 +568,10 @@
             serverName={mcpServerName}
             title={mcpTitle}
             viewMode={mcpViewMode}
-            on:ready={() => console.log('✅ MCP View ready')}
-            on:navigate={(e) => console.log('🧭 Navigate:', e.detail)}
-            on:state-update={(e) => console.log('📊 State update:', e.detail)}
-            on:resize-request={(e) => {
+            onready={() => console.log('✅ MCP View ready')}
+            onnavigate={(e) => console.log('🧭 Navigate:', e.detail)}
+            onstate-update={(e) => console.log('📊 State update:', e.detail)}
+            onresize-request={(e) => {
               console.log('📐 Resize request:', e.detail);
               // Handle resize request if needed
             }}

@@ -1,0 +1,54 @@
+{
+    "new_variables": {
+        "state": "welcome"
+    },
+    "adaptive_card": {
+        "global": {},
+        "assist": {
+            "body": [
+                {
+                    "type": "TextBlock",
+                    "text": "请选择你想进行的操作：",
+                    "wrap": true
+                }
+            ],
+            "actions": [
+                {
+                    "type": "Action.Submit",
+                    "title": "📖 听故事",
+                    "data": {
+                        "action": "story_browsing"
+                    }
+                },
+                {
+                    "type": "Action.Submit",
+                    "title": "📚 开始学习",
+                    "data": {
+                        "action": "lesson_menu"
+                    }
+                },
+                {
+                    "type": "Action.Submit",
+                    "title": "♟️ 我要下棋",
+                    "data": {
+                        "action": "game_setup"
+                    }
+                },
+                {
+                    "type": "Action.Submit",
+                    "title": "📺 看经典棋局",
+                    "data": {
+                        "action": "replay_browsing"
+                    }
+                },
+                {
+                    "type": "Action.Submit",
+                    "title": "📊 查看我的档案",
+                    "data": {
+                        "action": "profile_viewing"
+                    }
+                ]
+            }
+        }
+    }
+}
