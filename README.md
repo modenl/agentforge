@@ -260,6 +260,107 @@ GUI自动销毁
 - **人机协作**: 人类负责定义需求，AI负责实现和优化
 - **自适应系统**: 应用能够根据使用情况自我学习和改进
 
+## 🧠 Variables：LLM的长期记忆
+
+### 核心理念：自我进化的记忆系统
+
+在AgentForge中，**Variables（变量）是LLM实现自我进化的长期记忆机制**。这是一个突破性的设计理念：
+
+#### 🔑 Variables不是传统变量
+
+传统程序中的变量：
+```javascript
+// 程序员预定义的变量
+let userName = "";
+let userAge = 0;
+let isLoggedIn = false;
+```
+
+AgentForge中的Variables：
+```javascript
+// LLM自主创建和管理的记忆
+{
+  "user_preference_color": "blue",           // LLM发现用户喜欢蓝色
+  "conversation_style": "formal",            // LLM注意到用户偏好正式语气
+  "last_error_context": "file_not_found",    // LLM记住上次错误的上下文
+  "learning_progress_math": 0.75,            // LLM跟踪学习进度
+  "custom_workflow_steps": [...],            // LLM创建的自定义工作流
+  // ... LLM根据需要创建的任何其他记忆
+}
+```
+
+#### 🌟 自我进化的机制
+
+1. **LLM主导的记忆创建**
+   - LLM在对话中发现需要记住某些信息
+   - 自主决定创建新的variable来存储
+   - 无需程序员预先定义
+
+2. **框架的角色：透明传递**
+   - 框架只负责在对话间传递variables
+   - 不干预、不解释、不限制variables的内容
+   - 完全由LLM决定如何使用这些记忆
+
+3. **进化式学习**
+   ```
+   对话1: LLM发现用户喜欢简洁回答 → 创建 "response_style": "concise"
+   对话2: LLM读取这个记忆 → 自动采用简洁风格
+   对话3: LLM发现用户在技术话题需要详细解释 → 更新为 "response_style": {"default": "concise", "technical": "detailed"}
+   ```
+
+#### 💡 实际应用示例
+
+**示例1：个性化助手**
+```json
+{
+  "user_name": "张三",
+  "discovered_interests": ["编程", "咖啡", "爵士乐"],
+  "communication_patterns": {
+    "morning": "需要咖啡推荐",
+    "evening": "喜欢聊技术话题"
+  },
+  "custom_shortcuts": {
+    "查看日程": "显示今天的会议和待办事项",
+    "代码回顾": "展示最近修改的代码并分析"
+  }
+}
+```
+
+**示例2：学习系统**
+```json
+{
+  "student_level": "intermediate",
+  "mastered_concepts": ["变量", "循环", "条件判断"],
+  "struggling_areas": ["递归", "异步编程"],
+  "preferred_examples": "game_based",
+  "optimal_session_duration": "25_minutes",
+  "last_breakthrough": "理解了闭包概念通过咖啡店类比"
+}
+```
+
+#### 🔄 Variables生命周期
+
+1. **诞生**：LLM在对话中识别到需要记忆的信息
+2. **使用**：在后续对话中读取和参考
+3. **进化**：根据新的交互更新和优化
+4. **淘汰**：LLM判断某些记忆不再需要时删除
+
+#### 🎯 设计哲学
+
+- **去中心化**：没有中央schema，LLM完全自主管理
+- **语义驱动**：variable命名和结构由LLM根据语义决定
+- **动态演化**：记忆结构随着使用不断优化
+- **跨会话持续**：真正的长期记忆，不受会话限制
+
+#### 🚀 这意味着什么？
+
+1. **无限可能**：LLM可以记住任何它认为重要的信息
+2. **自适应**：系统会越用越聪明，越用越个性化
+3. **零配置**：开发者不需要预定义数据结构
+4. **真正的AI原生**：让AI像人一样积累经验和记忆
+
+这种设计让每个基于AgentForge的应用都具有真正的"学习"能力，能够随着使用不断进化，为每个用户提供独特的个性化体验。
+
 ## 🏗️ 框架架构
 
 ### 框架概述
