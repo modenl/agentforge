@@ -498,7 +498,9 @@ welcome (欢迎页)
 | `lesson_menu` | 选择主题 | `lesson_learning` | `lesson_current_topic: 主题` | 无需工具，LLM提供教学内容 |
 | `lesson_learning` | 需要演示棋局 | - | - | `load_pgn_for_replay` |
 | `welcome` | "我要下棋" | `game_setup` | - | 无需工具，展示难度选择 |
-| `game_setup` | 开始对弈 | `game_playing` | `game_ai_elo: 等级` | `setup_game` |
+| `game_setup` | 选择预设难度 | `game_playing` | `game_ai_elo: 等级` | `setup_game`（使用默认参数） |
+| `game_setup` | 选择自定义设置 | `game_setup` | - | 无需工具，展示参数收集表单 |
+| `game_setup` | 提交自定义参数 | `game_playing` | `game_ai_elo`, `game_player_color` 等 | `setup_game`（使用收集的参数） |
 | `game_playing` | 请求提示 | - | - | `suggest_best_move` |
 | `game_playing` | 分析局面 | - | - | `analyze_position` |
 | `game_playing` | "结束对弈" | `welcome` | - | `reset_game` |
@@ -572,7 +574,7 @@ welcome (欢迎页)
 }
 ```
 
-#### 选择AI难度时
+#### 选择AI难度时（快速选择）
 ```json
 {
   "body": [
@@ -583,10 +585,103 @@ welcome (欢迎页)
     {"type": "Action.Submit", "title": "📗 入门 (ELO 800)", "data": {"elo": 800}},
     {"type": "Action.Submit", "title": "📘 进阶 (ELO 1000)", "data": {"elo": 1000}},
     {"type": "Action.Submit", "title": "📙 挑战 (ELO 1200)", "data": {"elo": 1200}},
-    {"type": "Action.Submit", "title": "🎯 自定义", "data": {"action": "custom_elo"}}
+    {"type": "Action.Submit", "title": "🎯 自定义设置", "data": {"action": "custom_setup"}}
   ]
 }
 ```
+
+#### 自定义游戏设置时（完整参数收集）
+**重要**：当用户选择"自定义设置"或需要收集setup_game的所有参数时，应生成如下的assist card：
+
+```json
+{
+  "body": [
+    {"type": "TextBlock", "text": "自定义游戏设置", "weight": "Bolder", "size": "Medium"},
+    {
+      "type": "Input.Number",
+      "id": "ai_elo",
+      "placeholder": "AI等级 (800-2800)",
+      "min": 800,
+      "max": 2800,
+      "value": 1500,
+      "label": "AI强度"
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "player_color",
+      "label": "你执棋颜色",
+      "choices": [
+        {"title": "白棋先行", "value": "white"},
+        {"title": "黑棋后手", "value": "black"}
+      ],
+      "value": "white",
+      "style": "expanded"
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "mode",
+      "label": "游戏模式",
+      "choices": [
+        {"title": "人机对战", "value": "human_vs_ai"},
+        {"title": "人人对战", "value": "human_vs_human"}
+      ],
+      "value": "human_vs_ai",
+      "style": "expanded"
+    },
+    {
+      "type": "Input.Number",
+      "id": "ai_time_limit",
+      "placeholder": "AI思考时间 (毫秒)",
+      "min": 200,
+      "max": 5000,
+      "value": 1000,
+      "label": "AI反应速度"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "开始游戏",
+      "data": {"action": "start_custom_game"},
+      "style": "positive"
+    },
+    {
+      "type": "Action.Submit",
+      "title": "返回",
+      "data": {"action": "back_to_presets"}
+    }
+  ]
+}
+```
+
+**工作流程说明**：
+1. 用户填写表单并点击"开始游戏"
+2. LLM接收到的数据格式如下（Input组件的值会自动合并到data中）：
+   ```json
+   {
+     "action": "start_custom_game",
+     "ai_elo": 1500,          // 来自Input.Number
+     "player_color": "white",  // 来自Input.ChoiceSet
+     "mode": "human_vs_ai",    // 来自Input.ChoiceSet
+     "ai_time_limit": 1000     // 来自Input.Number
+   }
+   ```
+3. LLM根据接收到的数据生成对应的MCP工具调用：
+   ```json
+   "mcp_tools": [
+     {
+       "action": "mcp_chess-trainer-mcp_setup_game",
+       "parameters": {
+         "mode": "human_vs_ai",
+         "player_color": "white",
+         "ai_elo": 1500,
+         "ai_time_limit": 1000
+       }
+     }
+   ]
+   ```
+
+**重要提示**：Adaptive Card会自动将所有Input组件的值（通过其id标识）合并到Action.Submit的data对象中，因此LLM会接收到完整的表单数据。
 
 > **Assist Card 设计原则（务必遵守）**
 > 1. Assist Card 只负责"交互入口"，保持极简。
@@ -682,11 +777,31 @@ welcome (欢迎页)
    ```
 
 **当用户想下棋时**：
-1. 直接调用 `mcp_setup_game`
-2. 理解参数含义：
-   - mode: "human_vs_ai"
-   - ai_elo: 800（初级）到 2800（大师级）
-   - player_color: "white" 或 "black"
+1. **快速开始**：用户选择预设难度后，使用默认参数调用 `mcp_setup_game`：
+   ```json
+   {
+     "action": "mcp_chess-trainer-mcp_setup_game",
+     "parameters": {
+       "mode": "human_vs_ai",
+       "player_color": "white",
+       "ai_elo": 800  // 根据选择的难度
+     }
+   }
+   ```
+
+2. **自定义设置**：先展示参数收集表单（见第591行示例），收集到参数后调用：
+   ```json
+   {
+     "action": "mcp_chess-trainer-mcp_setup_game",
+     "parameters": {
+       "mode": "human_vs_ai",      // 从Input.ChoiceSet收集
+       "player_color": "white",    // 从Input.ChoiceSet收集
+       "ai_elo": 1500,            // 从Input.Number收集
+       "ai_time_limit": 1000      // 从Input.Number收集
+     }
+   }
+   ```
+
 3. 随后使用 `make_move` 处理走棋
 
 ### 5.5 经典棋局PGN示例

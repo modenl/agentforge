@@ -318,6 +318,30 @@
     sendMessageToCoreAgent(messageText);
   }
 
+  // 处理表单提交（包含多个输入字段的数据）
+  function handleFormSubmission(actionInfo) {
+    // 构建消息，主要显示按钮标题，参数作为附加信息
+    let message = actionInfo.title || '执行操作';
+    
+    // 过滤掉内部生成的字段
+    if (actionInfo.data && Object.keys(actionInfo.data).length > 0) {
+      const cleanData = Object.entries(actionInfo.data)
+        .filter(([key]) => !key.startsWith('__ac-'))
+        .reduce((obj, [key, value]) => {
+          obj[key] = value;
+          return obj;
+        }, {});
+      
+      // 添加特殊标记的参数信息，用于渲染时特殊处理
+      if (Object.keys(cleanData).length > 0) {
+        message += `\n<!--form-data:${JSON.stringify(cleanData)}-->`;
+      }
+    }
+    
+    // 发送消息
+    sendMessageToCoreAgent(message);
+  }
+
   // 处理输入辅助卡片按钮点击
   function handleInputAssistCardAction(event) {
 
@@ -354,7 +378,7 @@
   }
 
   // 暴露给父组件的方法
-  export { handleExternalMessage };
+  export { handleExternalMessage, handleFormSubmission };
 
   // 处理键盘事件
   function handleKeydown(event) {
@@ -375,6 +399,60 @@
       hour: '2-digit',
       minute: '2-digit'
     });
+  }
+  
+  // 处理消息内容，美化表单数据显示
+  function processMessageContent(content, role) {
+    if (!content || role !== 'user') return content;
+    
+    // 检查是否包含表单数据注释
+    const formDataMatch = content.match(/<!--form-data:(.*?)-->/s);
+    if (formDataMatch) {
+      // 分离主文本和表单数据
+      const mainText = content.replace(/<!--form-data:.*?-->/s, '').trim();
+      const formDataJson = formDataMatch[1];
+      
+      try {
+        const formData = JSON.parse(formDataJson);
+        
+        // 过滤掉内部生成的字段和action字段
+        const filteredData = Object.entries(formData)
+          .filter(([key]) => !key.startsWith('__ac-') && key !== 'action')
+          .reduce((obj, [key, value]) => {
+            obj[key] = value;
+            return obj;
+          }, {});
+        
+        // 创建简洁的参数摘要
+        const summary = Object.entries(filteredData)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join(', ');
+        
+        // 如果没有有效参数，只返回主文本
+        if (Object.keys(filteredData).length === 0) {
+          return `<div class="message-main">${mainText}</div>`;
+        }
+        
+        // 返回格式化的HTML
+        return `
+          <div class="message-with-form">
+            <div class="message-main">${mainText}</div>
+            <details class="form-params">
+              <summary class="params-summary">参数</summary>
+              <div class="params-list">
+                ${Object.entries(filteredData).map(([key, value]) => 
+                  `<div class="param-item"><span class="param-key">${key}:</span> <span class="param-value">${value}</span></div>`
+                ).join('')}
+              </div>
+            </details>
+          </div>
+        `;
+      } catch (e) {
+        // JSON解析失败，返回原内容
+      }
+    }
+    
+    return content;
   }
 
   // 获取角色图标
@@ -442,7 +520,13 @@
               <div class="html-content">{@html message.content}</div>
             {:else}
               <div class="markdown-content">
-                {@html marked(message.content || '')}
+                {#if message.role === 'user' && message.content && message.content.includes('<!--form-data:')}
+                  {@html processMessageContent(message.content || '', message.role)}
+                {:else if message.role === 'user'}
+                  {@html marked(message.content || '')}
+                {:else}
+                  {@html marked(message.content || '')}
+                {/if}
                 {#if message.isStreaming}
                   <span class="streaming-indicator">▌</span>
                 {/if}
@@ -792,6 +876,86 @@
 
   :global(.chat-window .message.user .message-content svg) {
     /* 用户消息中的SVG保持透明背景 */
+  }
+  
+  /* 表单参数样式 */
+  :global(.message-with-form) {
+    width: 100%;
+  }
+  
+  :global(.message-with-form .message-main) {
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+  
+  :global(.message-with-form .form-params) {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+    padding: 8px;
+    margin-top: 4px;
+    font-size: 0.9em;
+  }
+  
+  :global(.message.user .message-with-form .form-params) {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  :global(.message-with-form .params-summary) {
+    cursor: pointer;
+    color: rgba(0, 0, 0, 0.6);
+    font-size: 0.9em;
+    user-select: none;
+  }
+  
+  :global(.message.user .message-with-form .params-summary) {
+    color: rgba(255, 255, 255, 0.8);
+  }
+  
+  :global(.message-with-form .params-summary::-webkit-details-marker) {
+    color: rgba(0, 0, 0, 0.4);
+  }
+  
+  :global(.message.user .message-with-form .params-summary::-webkit-details-marker) {
+    color: rgba(255, 255, 255, 0.6);
+  }
+  
+  :global(.message-with-form .params-list) {
+    margin-top: 8px;
+    font-size: 0.85em;
+  }
+  
+  :global(.message-with-form .param-item) {
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  }
+  
+  :global(.message.user .message-with-form .param-item) {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  :global(.message-with-form .param-item:last-child) {
+    border-bottom: none;
+  }
+  
+  :global(.message-with-form .param-key) {
+    font-weight: 500;
+    margin-right: 8px;
+    color: rgba(0, 0, 0, 0.7);
+    min-width: 100px;
+  }
+  
+  :global(.message.user .message-with-form .param-key) {
+    color: rgba(255, 255, 255, 0.9);
+  }
+  
+  :global(.message-with-form .param-value) {
+    color: rgba(0, 0, 0, 0.6);
+  }
+  
+  :global(.message.user .message-with-form .param-value) {
+    color: rgba(255, 255, 255, 0.7);
   }
 
   /* Markdown内容样式 */
