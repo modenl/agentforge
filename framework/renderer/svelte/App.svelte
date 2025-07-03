@@ -283,7 +283,6 @@
 
   // 处理来自ChatWindow的状态更新事件
   function handleStateUpdate(event) {
-    console.log('🎯 App.svelte handleStateUpdate called with:', event.detail);
     const { newState, adaptiveCard } = event.detail;
 
     if (newState) {
@@ -291,7 +290,6 @@
     }
 
     if (adaptiveCard) {
-      console.log('🎯 App.svelte calling updateGlobalCard with:', adaptiveCard);
       updateGlobalCard(adaptiveCard);
     }
   }
@@ -299,30 +297,40 @@
   // 处理InputAssistCard按钮点击
   function handleInputAssistAction(event) {
     const eventData = event.detail;
-    console.log('🎯 InputAssist Card Event:', eventData);
-
-    // 从事件中提取action数据
     const actionData = eventData.action;
 
-    // 快速回复，直接发送到ChatWindow
-    let messageText = '';
-    if (actionData && actionData.data && actionData.data.text) {
-      messageText = actionData.data.text;
-    } else if (actionData && actionData.title) {
-      messageText = actionData.title;
-    }
+    // 检查是否有表单数据需要发送
+    if (actionData && actionData.data && Object.keys(actionData.data).length > 0) {
+      // 有表单数据，需要将按钮标题和数据都传递给ChatWindow
+      if (chatWindowComponent && chatWindowComponent.handleFormSubmission) {
+        // 传递完整的动作信息，包括标题和数据
+        chatWindowComponent.handleFormSubmission({
+          title: actionData.title || '执行操作',
+          data: actionData.data
+        });
+      } else if (chatWindowComponent && chatWindowComponent.handleExternalMessage) {
+        // 如果没有专门的表单处理函数，将数据序列化后发送
+        const formDataStr = JSON.stringify(actionData.data);
+        chatWindowComponent.handleExternalMessage(formDataStr);
+      }
+    } else {
+      // 没有表单数据，只发送按钮文本
+      let messageText = '';
+      if (actionData && actionData.data && actionData.data.text) {
+        messageText = actionData.data.text;
+      } else if (actionData && actionData.title) {
+        messageText = actionData.title;
+      }
 
-    console.log('📤 InputAssist发送消息文本:', messageText);
-
-    // 通知ChatWindow处理这个消息
-    if (chatWindowComponent && chatWindowComponent.handleExternalMessage) {
-      chatWindowComponent.handleExternalMessage(messageText);
+      // 通知ChatWindow处理这个消息
+      if (chatWindowComponent && chatWindowComponent.handleExternalMessage) {
+        chatWindowComponent.handleExternalMessage(messageText);
+      }
     }
   }
 
   // 更新全局Adaptive Card
   function updateGlobalCard(cardData) {
-    console.log('🎯 更新全局Adaptive Card:', cardData);
 
     if (!cardData) {
       globalCard = null;

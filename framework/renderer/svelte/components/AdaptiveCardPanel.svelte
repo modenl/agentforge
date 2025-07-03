@@ -341,6 +341,7 @@
 
       // 创建 AdaptiveCard 实例
       const adaptiveCard = new AdaptiveCards.AdaptiveCard();
+    let renderedCard = null;
 
       // 设置主机配置 (在 AdaptiveCards 3.x 中，我们在每个实例上设置 hostConfig)
       if (globalHostConfig) {
@@ -353,11 +354,38 @@
 
       // 设置动作处理器
       adaptiveCard.onExecuteAction = action => {
+        let inputs = {};
+        
+        // 对于 Action.Submit，获取输入值
+        if (action.getJsonTypeName() === 'Action.Submit') {
+          // 从 DOM 直接获取输入值（最可靠的方法）
+          const container = renderedCard || cardContainer;
+          if (container) {
+            const inputElements = container.querySelectorAll('input, select, textarea');
+            inputElements.forEach(element => {
+              const id = element.getAttribute('data-id') || element.id || element.name;
+              if (id) {
+                if (element.type === 'checkbox') {
+                  inputs[id] = element.checked;
+                } else {
+                  inputs[id] = element.value;
+                }
+              }
+            });
+          }
+        }
+        
+        // 合并输入值到action.data中
+        const mergedData = {
+          ...(action.data || {}),
+          ...inputs
+        };
+        
         const actionData = {
           cardId: Date.now(),
           type: action.getJsonTypeName(),
           title: action.title,
-          data: action.data || {},
+          data: mergedData,
           originalAction: action
         };
 
@@ -365,7 +393,7 @@
       };
 
       // 渲染卡片
-      const renderedCard = adaptiveCard.render();
+      renderedCard = adaptiveCard.render();
 
 
       // 应用自定义样式
