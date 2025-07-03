@@ -2,9 +2,26 @@
 
 一个基于LLM+Prompt+MCP的智能代理应用开发框架，提供统一的AI代理架构、自适应UI和系统集成能力，让开发者可以快速构建各种智能桌面应用。
 
-![AI Chess Game 示例界面](docs/Screenshot%202025-06-30%20at%204.50.05%E2%80%AFPM.png)
-
-> 上图为基于AgentForge开发的国际象棋AI教学系统实际界面，支持自然语言对弈、AI提示与动态UI。
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="50%">
+        <img src="docs/JIT_mcp_tool_ui.png" alt="动态UI界面" width="100%"/>
+        <br/>
+        <sub><b>Just-in-Time GUI 动态生成</b></sub>
+        <br/>
+        <sub>用户通过自然语言请求"自定义设置"，系统即时生成对应界面</sub>
+      </td>
+      <td align="center" width="50%">
+        <img src="docs/MCP_server_ui.png" alt="国际象棋界面" width="100%"/>
+        <br/>
+        <sub><b>MCP WebView 集成界面</b></sub>
+        <br/>
+        <sub>国际象棋AI教学系统，支持自然语言对弈与AI提示</sub>
+      </td>
+    </tr>
+  </table>
+</div>
 
 ---
 
