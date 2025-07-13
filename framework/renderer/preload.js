@@ -150,6 +150,48 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return `${hours}小时${mins}分钟`;
     }
     return `${mins}分钟`;
+  },
+
+  // ==================== 通用事件监听器 ====================
+  
+  // Event listeners
+  on: (channel, callback) => {
+    const validChannels = [
+      'stream-chunk-',
+      'message-update',
+      'plugin-ui-response',
+      'mcp:server-webview-ready',
+      'mcp:server-stopped',
+      'webview:clearCache',
+      'display:message',
+      'display:assist-card',
+      'ui:update-global-card'
+    ];
+    
+    // Check if channel starts with any valid prefix
+    const isValid = validChannels.some(valid => 
+      channel === valid || channel.startsWith(valid + '-') || channel.startsWith(valid.replace('-', ''))
+    );
+    
+    if (isValid) {
+      // Add debug logging for display events
+      if (channel === 'display:message' || channel === 'display:assist-card') {
+        console.log(`🎯 [preload] Setting up listener for channel: ${channel}`);
+      }
+      
+      ipcRenderer.on(channel, (event, data) => {
+        // Debug log for display events
+        if (channel === 'display:message' || channel === 'display:assist-card') {
+          console.log(`🎯 [preload] Received ${channel} event:`, data);
+        }
+        callback(event, data);
+      });
+    }
+  },
+  
+  // Remove specific listener
+  off: (channel, callback) => {
+    ipcRenderer.removeListener(channel, callback);
   }
 });
 

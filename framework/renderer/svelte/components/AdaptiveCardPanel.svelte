@@ -309,17 +309,28 @@
 
       // 确保是有效的 AdaptiveCard 格式
       if (!cardPayload.type || cardPayload.type !== 'AdaptiveCard') {
-        cardPayload = {
-          type: 'AdaptiveCard',
-          version: '1.6',
-          body: [
-            {
-              type: 'TextBlock',
-              text: JSON.stringify(cardPayload, null, 2),
-              wrap: true
-            }
-          ]
-        };
+        // 如果有 body 或 actions，说明是卡片内容，只是缺少外层包装
+        if (cardPayload.body || cardPayload.actions) {
+          cardPayload = {
+            type: 'AdaptiveCard',
+            version: '1.6',
+            body: cardPayload.body || [],
+            actions: cardPayload.actions || []
+          };
+        } else {
+          // 否则显示为 JSON
+          cardPayload = {
+            type: 'AdaptiveCard',
+            version: '1.6',
+            body: [
+              {
+                type: 'TextBlock',
+                text: JSON.stringify(cardPayload, null, 2),
+                wrap: true
+              }
+            ]
+          };
+        }
       }
 
       // 确保版本为 1.6

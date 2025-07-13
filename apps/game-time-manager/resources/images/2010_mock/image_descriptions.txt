@@ -1,0 +1,42 @@
+Image Descriptions for AMC 8 2010 Mock Test:
+
+Problem 3 - problem3_gym_prices.png:
+A bar chart showing gym membership prices over 10 months.
+- Month 1: $30
+- Month 2: $35
+- Month 3: $25 (lowest)
+- Month 4: $35
+- Month 5: $35
+- Month 6: $40
+- Month 7: $40
+- Month 8: $45 (highest)
+- Month 9: $35
+- Month 10: $40
+Y-axis: Price ($), X-axis: Month (1-10)
+
+Problem 17 - problem17_hexagon.png:
+A hexagon made of 12 unit squares arranged in rows:
+- Top row: 3 squares
+- Middle row: 4 squares  
+- Bottom row: 5 squares
+Line MN divides the hexagon, with points P, M, Q marked on the line.
+
+Problem 18 - problem18_panel.png:
+A decorative panel showing:
+- A rectangle with length 32 inches and width 24 inches
+- Quarter-circles at each of the four corners
+- The quarter-circles have radius 6 inches
+
+Problem 19 - problem19_circles.png:
+Two concentric circles with center O:
+- Chord PQ of the outer circle is tangent to the inner circle at point R
+- Points P, Q are on the outer circle
+- Point R is on the inner circle where PQ touches it
+- Center O is marked
+
+Problem 23 - problem23_semicircles.png:
+A circle with center O containing two semicircles:
+- Semicircle ABC passes through center O
+- Semicircle DEF passes through center O  
+- The semicircles intersect at the center
+- All points A, B, C, D, E, F are marked on the circumference

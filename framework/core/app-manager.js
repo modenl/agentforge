@@ -1,7 +1,7 @@
 // Framework Core: Application Manager
 // Manages Electron app lifecycle, plugin loading, and IPC communication
 
-const { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const Store = require('electron-store');
@@ -21,6 +21,7 @@ class AppManager {
     
     // First preserve the original config values
     const originalAppName = config.appName;
+    console.log(`🔧 [APP_MANAGER] Constructor called with config.plugins.length = ${config.plugins ? config.plugins.length : 0}`);
     
     this.config = {
       ...config,  // Spread config first to get all properties
@@ -29,13 +30,14 @@ class AppManager {
         defaultHeight: 800,
         minWidth: 800,
         minHeight: 600,
-        minimizeToTray: true,
+        minimizeToTray: false,
         ...config.window
       },
       plugins: config.plugins || [],
       enableAutoLaunch: config.enableAutoLaunch !== false,
       supabase: config.supabase || {}
     };
+    console.log(`🔧 [APP_MANAGER] After config setup, this.config.plugins.length = ${this.config.plugins.length}`);
     
     // Ensure appName is preserved
     if (originalAppName) {
@@ -46,7 +48,6 @@ class AppManager {
     
 
     this.mainWindow = null;
-    this.tray = null;
     this.store = new Store();
     this.coreAgent = null;
     this.mcpManager = null;
@@ -267,6 +268,8 @@ class AppManager {
     } else {
       this.mcpManager = new MCPManager(logger);
       await this.mcpManager.initialize(this.supabaseClient);
+      // Set AppManager reference for built-in tools
+      this.mcpManager.setAppManager(this);
       logger.info('MCP Manager initialized');
     }
     
@@ -294,7 +297,7 @@ class AppManager {
   }
 
   /**
-   * Register MCP server configurations without connecting
+   * Register MCP server configurations (lazy loading - connect on demand)
    */
   async registerMCPServerConfigs() {
     logger.info('Registering MCP server configurations...');
@@ -312,14 +315,23 @@ class AppManager {
     // Register MCP server configurations from plugin configs
     for (const plugin of this.plugins.values()) {
       const pluginId = plugin.id || plugin.constructor.name;
-      if (this.mcpManager && plugin.config && plugin.config.mcpServers && typeof plugin.config.mcpServers === 'object') {
-        this.mcpManager.registerServerConfigs(pluginId, plugin.config.mcpServers);
+      logger.info(`[MCP_CONFIG] Checking plugin ${pluginId} for MCP servers`);
+      
+      if (plugin.config && plugin.config.mcpServers) {
+        logger.info(`[MCP_CONFIG] Found MCP servers in plugin ${pluginId}:`, Object.keys(plugin.config.mcpServers));
+        if (this.mcpManager && typeof plugin.config.mcpServers === 'object') {
+          this.mcpManager.registerServerConfigs(pluginId, plugin.config.mcpServers);
+        }
+      } else {
+        logger.info(`[MCP_CONFIG] No MCP servers found in plugin ${pluginId}`);
       }
     }
     
     if (this.mcpManager) {
-      logger.info(`Registered ${this.mcpManager.serverConfigs.size} MCP server configurations`);
+      logger.info(`Registered ${this.mcpManager.serverConfigs.size} MCP server configurations (lazy loading enabled)`);
     }
+    
+    // Note: Servers will be connected on-demand when first used
   }
 
   /**
@@ -342,8 +354,15 @@ class AppManager {
     // Register MCP server configurations from plugin configs
     for (const plugin of this.plugins.values()) {
       const pluginId = plugin.id || plugin.constructor.name;
-      if (this.mcpManager && plugin.config && plugin.config.mcpServers && typeof plugin.config.mcpServers === 'object') {
-        this.mcpManager.registerServerConfigs(pluginId, plugin.config.mcpServers);
+      logger.info(`[MCP_CONFIG] Checking plugin ${pluginId} for MCP servers`);
+      
+      if (plugin.config && plugin.config.mcpServers) {
+        logger.info(`[MCP_CONFIG] Found MCP servers in plugin ${pluginId}:`, Object.keys(plugin.config.mcpServers));
+        if (this.mcpManager && typeof plugin.config.mcpServers === 'object') {
+          this.mcpManager.registerServerConfigs(pluginId, plugin.config.mcpServers);
+        }
+      } else {
+        logger.info(`[MCP_CONFIG] No MCP servers found in plugin ${pluginId}`);
       }
     }
     
@@ -398,6 +417,9 @@ class AppManager {
     if (!initSuccess) {
       throw new Error('Failed to initialize Core Agent');
     }
+    
+    // Set MCP manager reference in core agent
+    this.coreAgent.setMCPManager(this.mcpManager);
 
     logger.info('Framework services initialized');
   }
@@ -429,8 +451,11 @@ class AppManager {
           response.mcp_results = mcpResults;
           response.new_variables = this.coreAgent.getCurrentVariables();
           
-          // 特殊处理：如果MCP结果包含SVG，直接插入到消息中
-          this.injectMCPResultsIntoAIResponse(response, mcpResults);
+          // 将MCP结果添加到聊天历史
+          this.coreAgent.addMCPResultsToHistory(mcpResults);
+          
+          // 特殊处理：如果MCP结果包含SVG，直接插入到消息中 - 现在由前端处理
+          // this.injectMCPResultsIntoAIResponse(response, mcpResults);
           
           // 检查MCP结果中是否有webview_config
           for (const mcpResult of mcpResults) {
@@ -455,10 +480,12 @@ class AppManager {
     // Streaming input processing
     ipcMain.handle('core:processInputStreaming', async(event, userInput, context, listenerId) => {
       try {
+        // 使用真正的流式处理，现在支持工具调用
         const streamCallback = (chunkData) => {
+          // 发送流式数据到前端
           event.sender.send(`stream-chunk-${listenerId}`, chunkData);
         };
-
+        
         const response = await this.coreAgent.processInputStreaming(userInput, context, streamCallback);
         
         console.log('🌊 [AppManager] 流式处理完成，响应内容:', {
@@ -469,14 +496,14 @@ class AppManager {
           hasMCPTools: !!(response.mcp_tools && response.mcp_tools.length > 0)
         });
 
-        // Execute MCP tools if any
+        // Execute MCP tools if any (可能已经在流式处理中执行过了)
         if (response.mcp_tools && response.mcp_tools.length > 0) {
           const mcpResults = await this.executeMCPTools(response.mcp_tools);
           response.mcp_results = mcpResults;
           response.new_variables = this.coreAgent.getCurrentVariables();
           
-          // 特殊处理：如果MCP结果包含SVG，直接插入到消息中
-          this.injectMCPResultsIntoAIResponse(response, mcpResults);
+          // 将MCP结果添加到聊天历史
+          this.coreAgent.addMCPResultsToHistory(mcpResults);
           
           // 检查MCP结果中是否有webview_config
           for (const mcpResult of mcpResults) {
@@ -655,6 +682,7 @@ class AppManager {
       try {
         logger.info(`Attempting to execute MCP tool: ${tool.action}`);
         const result = await this.mcpManager.executeMCPTool(tool.action, tool.parameters || tool.params, tool.role || 'Agent');
+        
         results.push({
           action: tool.action,
           success: true,
@@ -879,17 +907,8 @@ class AppManager {
       logger.error('Renderer process crashed, killed:', killed);
     });
 
-    // Create tray if enabled
-    if (this.config.window.minimizeToTray) {
-      this.createTray();
-    }
 
     // Handle window events
-    this.mainWindow.on('minimize', () => {
-      if (this.config.window.minimizeToTray && this.tray) {
-        this.mainWindow.hide();
-      }
-    });
 
     this.mainWindow.on('closed', () => {
       this.mainWindow = null;
@@ -899,48 +918,6 @@ class AppManager {
     return this.mainWindow;
   }
 
-  /**
-   * Create system tray
-   */
-  createTray() {
-    const iconPath = this.config.window.trayIcon ||
-      path.join(__dirname, '../assets/tray-icon.png');
-
-    try {
-      this.tray = new Tray(iconPath);
-
-      const contextMenu = Menu.buildFromTemplate([
-        {
-          label: 'Show App',
-          click: () => {
-            this.mainWindow.show();
-          }
-        },
-        {
-          label: 'Quit',
-          click: () => {
-            // Let the launcher handle the quit process
-            if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-              this.mainWindow.close();
-            } else {
-              app.quit();
-            }
-          }
-        }
-      ]);
-
-      this.tray.setContextMenu(contextMenu);
-      this.tray.setToolTip(this.config.appName || 'Framework App');
-
-      this.tray.on('click', () => {
-        this.mainWindow.show();
-      });
-
-      logger.info('System tray created');
-    } catch (error) {
-      logger.warn('Failed to create system tray:', error);
-    }
-  }
 
   /**
    * Get plugin by ID

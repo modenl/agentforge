@@ -24,6 +24,7 @@ class CoreAgent {
     // 让每个应用定义自己的初始变量
     this.currentVariables = config.initialVariables || {};
     this.currentAdaptiveCard = null; // 当前卡片状态
+    this.messageIdCounter = 0; // 消息ID计数器
   }
 
   async initialize(businessPrompts = [], mcpManager = null) {
@@ -39,6 +40,204 @@ class CoreAgent {
     } catch (error) {
       console.error('Failed to initialize CoreAgent:', error);
       return false;
+    }
+  }
+
+  setMCPManager(mcpManager) {
+    this.mcpManager = mcpManager;
+  }
+
+  convertMCPToolsToOpenAIFormat() {
+    console.log('🛠️ [convertMCPToolsToOpenAIFormat] Starting conversion...');
+    
+    if (!this.mcpManager || !this.mcpManager.isReady()) {
+      console.log('🛠️ [convertMCPToolsToOpenAIFormat] MCP Manager not ready');
+      return [];
+    }
+
+    const mcpTools = this.mcpManager.getMCPToolsForPrompt();
+    console.log(`🛠️ [convertMCPToolsToOpenAIFormat] Got ${mcpTools.length} MCP tools`);
+    
+    const openAITools = [];
+
+    for (const tool of mcpTools) {
+      const openAITool = {
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description || 'MCP tool',
+          parameters: tool.inputSchema || {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        }
+      };
+      openAITools.push(openAITool);
+      console.log(`🛠️ [convertMCPToolsToOpenAIFormat] Converted tool: ${tool.name}`);
+    }
+
+    console.log(`🛠️ [convertMCPToolsToOpenAIFormat] Total OpenAI tools: ${openAITools.length}`);
+    console.log('🛠️ [convertMCPToolsToOpenAIFormat] Tool names:', openAITools.map(t => t.function.name));
+    
+    return openAITools;
+  }
+
+  async handleToolCalls(message, userInput) {
+    try {
+      const toolResults = [];
+      
+      // Execute each tool call
+      for (const toolCall of message.tool_calls) {
+        const toolName = toolCall.function.name;
+        const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+        
+        console.log(`🔧 [TOOL_CALL] Executing ${toolName} with args:`, toolArgs);
+        
+        try {
+          const result = await this.mcpManager.executeMCPTool(toolName, toolArgs, 'assistant');
+          
+          toolResults.push({
+            tool_call_id: toolCall.id,
+            role: 'tool',
+            name: toolName,
+            content: JSON.stringify(result)
+          });
+        } catch (error) {
+          console.error(`❌ [TOOL_ERROR] Failed to execute ${toolName}:`, error);
+          toolResults.push({
+            tool_call_id: toolCall.id,
+            role: 'tool',
+            name: toolName,
+            content: JSON.stringify({ error: error.message })
+          });
+        }
+      }
+
+      // Add tool results to chat history
+      this.updateChatHistoryWithToolCalls(userInput, message, toolResults);
+      
+      // Convert tool results to MCP format and add to history
+      const mcpResults = toolResults.map(tr => ({
+        action: tr.name,
+        success: !tr.content.includes('error'),
+        result: JSON.parse(tr.content)
+      }));
+      this.addMCPResultsToHistory(mcpResults);
+      
+      // Check if any tools need follow-up response
+      // All builtin MCP tools don't need follow-up
+      const needsFollowUp = message.tool_calls.some(tc => {
+        // If it's an external MCP tool (starts with mcp_), it might need follow-up
+        if (tc.function.name.startsWith('mcp_')) {
+          return true;
+        }
+        // All other tools (builtin) don't need follow-up
+        return false;
+      });
+      
+      if (!needsFollowUp) {
+        // All tools are UI-only, no need for follow-up LLM call
+        console.log('🎯 [TOOL_HANDLER] All tools are UI-only, skipping follow-up LLM call');
+        
+        return {
+          success: true,
+          message: message.content || '',
+          mcp_results: mcpResults,
+          new_variables: this.getCurrentVariables(),
+          adaptive_card: this.currentAdaptiveCard,
+          mcp_tools: []
+        };
+      }
+
+      // Get follow-up response from LLM with tool results
+      const messages = [
+        { role: 'system', content: this.systemPrompt },
+        ...this.getCleanChatHistory()
+      ];
+
+      const followUpParams = {
+        messages: messages,
+        temperature: this.config.temperature,
+        max_tokens: this.config.maxTokens
+      };
+
+      // Include tools again in case more calls are needed
+      const tools = this.convertMCPToolsToOpenAIFormat();
+      if (tools.length > 0) {
+        followUpParams.tools = tools;
+        followUpParams.tool_choice = 'auto';
+      }
+
+      const followUpResponse = await this.aiClient.chat.completions.create(followUpParams);
+      const followUpMessage = followUpResponse.choices[0].message;
+
+      // Check if more tool calls are needed
+      if (followUpMessage.tool_calls && followUpMessage.tool_calls.length > 0) {
+        return await this.handleToolCalls(followUpMessage, '');
+      }
+
+      // Parse the final response
+      const result = this.parseResponse(followUpMessage.content || '', '');
+      
+      // Update final message in history
+      this.updateChatHistory('', followUpMessage.content || '');
+
+      // Include the MCP results that were executed
+      result.mcp_results = mcpResults;
+
+      return result;
+    } catch (error) {
+      console.error('❌ [TOOL_HANDLER_ERROR]:', error);
+      return this.getErrorResponse(error);
+    }
+  }
+
+  updateChatHistoryWithToolCalls(userInput, assistantMessage, toolResults) {
+    // Add user message if provided
+    if (userInput && userInput.trim()) {
+      this.messageIdCounter++;
+      this.rawChatHistory.push({
+        id: this.messageIdCounter,
+        role: 'user',
+        content: userInput,
+        timestamp: new Date().toISOString()
+      });
+      this.visibleChatHistory.push({
+        id: this.messageIdCounter,
+        role: 'user',
+        content: userInput,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Add assistant message with tool calls
+    this.messageIdCounter++;
+    const assistantEntry = {
+      id: this.messageIdCounter,
+      role: 'assistant',
+      content: assistantMessage.content || '',
+      tool_calls: assistantMessage.tool_calls,
+      timestamp: new Date().toISOString()
+    };
+    this.rawChatHistory.push(assistantEntry);
+
+    // For visible history, show a simplified version
+    this.visibleChatHistory.push({
+      id: this.messageIdCounter,
+      role: 'assistant',
+      content: assistantMessage.content || '[执行工具调用中...]',
+      timestamp: new Date().toISOString()
+    });
+
+    // Add tool results to raw history
+    for (const toolResult of toolResults) {
+      this.messageIdCounter++;
+      this.rawChatHistory.push({
+        id: this.messageIdCounter,
+        ...toolResult,
+        timestamp: new Date().toISOString()
+      });
     }
   }
 
@@ -75,7 +274,7 @@ class CoreAgent {
   }
 
   async loadSystemPrompt(businessPrompts = [], mcpManager = null) {
-    const basePromptPath = path.join(__dirname, '../config/base-prompt.md');
+    const basePromptPath = path.join(__dirname, '../config/base-prompt-tools.md');
 
     try {
       const basePrompt = await fs.readFile(basePromptPath, 'utf8');
@@ -97,6 +296,7 @@ class CoreAgent {
       for (const businessPrompt of businessPrompts) {
         if (businessPrompt && businessPrompt.trim()) {
           combinedPrompt += '\n\n' + businessPrompt.trim();
+          console.log('📋 [BUSINESS_PROMPT_INJECTED] Business prompt added to system prompt');
         }
       }
 
@@ -125,8 +325,10 @@ class CoreAgent {
         current_variables: this.currentVariables,
         current_adaptive_card: this.currentAdaptiveCard,
         timestamp: new Date().toISOString(),
+        last_mcp_result_id: this.lastMCPResultId || null,
         ...context
       };
+      
 
       // 将状态信息注入到 prompt 模板中
       const fullSystemPrompt = this.systemPrompt.replace(
@@ -134,51 +336,64 @@ class CoreAgent {
         `\`\`\`json\n${JSON.stringify(contextInfo, null, 2)}\n\`\`\``
       );
 
+      // Build messages array
+      const chatHistory = this.getCleanChatHistory();
+      
+      const messages = [
+        { role: 'system', content: fullSystemPrompt },
+        ...chatHistory
+      ];
+      
+      // Only add the current user input if it's not empty
+      if (userInput && userInput.trim()) {
+        messages.push({ role: 'user', content: userInput });
+      } else {
+      }
+      
       const requestParams = {
-        messages: [
-          { role: 'system', content: fullSystemPrompt },
-          ...this.getCleanChatHistory(),
-          { role: 'user', content: userInput }
-        ],
+        messages: messages,
         temperature: this.config.temperature,
         max_tokens: this.config.maxTokens
       };
 
-      // 📝 记录完整的LLM上下文及请求参数
-      console.log('\n🤖 [LLM_FULL_CONTEXT] 完整请求上下文:');
-      console.log('🤖 [LLM_REQUEST_PARAMS]:', {
-        model: this.config.model,
-        temperature: requestParams.temperature,
-        max_tokens: requestParams.max_tokens,
-        messages_count: requestParams.messages.length
-      });
-      console.log('🤖 [LLM_INPUT_MESSAGES]:');
-      console.log('=' .repeat(80));
-      requestParams.messages.forEach((msg, index) => {
-        console.log(`📋 Message ${index + 1} [${msg.role}]:`);
-        console.log('-'.repeat(40));
-        console.log(msg.content);
-        console.log('-'.repeat(40));
-        console.log('');
-      });
-      console.log('=' .repeat(80));
+      // 添加 MCP 工具作为 OpenAI functions
+      if (this.mcpManager && this.mcpManager.isReady()) {
+        const tools = this.convertMCPToolsToOpenAIFormat();
+        if (tools.length > 0) {
+          requestParams.tools = tools;
+          requestParams.tool_choice = 'auto'; // Let the model decide when to use tools
+          
+          // Log when we expect the LLM to call a specific tool
+          if (userInput && (userInput.includes('答题赚时间') || userInput.includes('start_quiz'))) {
+            console.log('🎯 [EXPECTED_TOOL_CALL] User wants to start quiz, expecting mcp_amc8-quiz-mcp_random_problem to be called');
+            console.log('🎯 [EXPECTED_TOOL_CALL] Available quiz tools:', tools.filter(t => t.function.name.includes('quiz')).map(t => t.function.name));
+          }
+        }
+      }
 
       // 调用LLM获取响应
       const response = await this.aiClient.chat.completions.create(requestParams);
-      const aiResponse = response.choices[0].message.content;
+      const message = response.choices[0].message;
 
-      // 📝 记录LLM响应
-      console.log('\n🤖 [LLM_RESPONSE]:');
-      console.log('=' .repeat(80));
-      console.log(aiResponse);
-      console.log('=' .repeat(80));
-      console.log(''); // 空行分隔
+      // 处理工具调用
+      if (message.tool_calls && message.tool_calls.length > 0) {
+        console.log('🎯 [LLM_DECISION] LLM decided to call tools:', message.tool_calls.map(tc => tc.function.name));
+        return await this.handleToolCalls(message, userInput);
+      } else {
+        // Log when LLM didn't call tools despite having them available
+        if (requestParams.tools && requestParams.tools.length > 0) {
+          console.log('⚠️ [LLM_DECISION] LLM chose NOT to call any tools despite having', requestParams.tools.length, 'tools available');
+          console.log('⚠️ [LLM_DECISION] Available tools were:', requestParams.tools.map(t => t.function.name));
+          console.log('⚠️ [LLM_DECISION] User input was:', userInput);
+          console.log('⚠️ [LLM_DECISION] LLM response preview:', message.content ? message.content.substring(0, 200) + '...' : 'NO CONTENT');
+        }
+      }
 
-      // 解析响应并更新状态
-      const result = this.parseResponse(aiResponse, userInput);
+      // 解析普通响应
+      const result = this.parseResponse(message.content, userInput);
 
       // 更新聊天历史
-      this.updateChatHistory(userInput, aiResponse);
+      this.updateChatHistory(userInput, message.content);
 
       return result;
     } catch (error) {
@@ -194,6 +409,7 @@ class CoreAgent {
         current_variables: this.currentVariables,
         current_adaptive_card: this.currentAdaptiveCard,
         timestamp: new Date().toISOString(),
+        last_mcp_result_id: this.lastMCPResultId || null,
         ...context
       };
 
@@ -203,46 +419,115 @@ class CoreAgent {
         `\`\`\`json\n${JSON.stringify(contextInfo, null, 2)}\n\`\`\``
       );
 
+      // Build messages array
+      const chatHistory = this.getCleanChatHistory();
+      
+      const messages = [
+        { role: 'system', content: fullSystemPrompt },
+        ...chatHistory
+      ];
+      
+      // Only add the current user input if it's not empty
+      if (userInput && userInput.trim()) {
+        messages.push({ role: 'user', content: userInput });
+      } else {
+      }
+      
       const requestParams = {
-        messages: [
-          { role: 'system', content: fullSystemPrompt },
-          ...this.getCleanChatHistory(),
-          { role: 'user', content: userInput }
-        ],
+        messages: messages,
         temperature: this.config.temperature,
         max_tokens: this.config.maxTokens
       };
 
-      // 📝 记录完整的LLM上下文及请求参数
-      console.log('\n🌊 [STREAM_FULL_CONTEXT] 完整请求上下文:');
-      console.log('🌊 [STREAM_REQUEST_PARAMS]:', {
-        model: this.config.model,
-        temperature: requestParams.temperature,
-        max_tokens: requestParams.max_tokens,
-        messages_count: requestParams.messages.length
-      });
-      console.log('🌊 [STREAM_INPUT_MESSAGES]:');
-      console.log('=' .repeat(80));
-      requestParams.messages.forEach((msg, index) => {
-        console.log(`📋 Message ${index + 1} [${msg.role}]:`);
-        console.log('-'.repeat(40));
-        console.log(msg.content);
-        console.log('-'.repeat(40));
-        console.log('');
-      });
-      console.log('=' .repeat(80));
+      // 添加 MCP 工具作为 OpenAI functions
+      if (this.mcpManager && this.mcpManager.isReady()) {
+        const tools = this.convertMCPToolsToOpenAIFormat();
+        if (tools.length > 0) {
+          requestParams.tools = tools;
+          requestParams.tool_choice = 'auto';
+          
+          // Log when we expect the LLM to call a specific tool
+          if (userInput && (userInput.includes('答题赚时间') || userInput.includes('start_quiz'))) {
+            console.log('🎯 [EXPECTED_TOOL_CALL_STREAM] User wants to start quiz, expecting mcp_amc8-quiz-mcp_random_problem to be called');
+            console.log('🎯 [EXPECTED_TOOL_CALL_STREAM] Available quiz tools:', tools.filter(t => t.function.name.includes('quiz')).map(t => t.function.name));
+          }
+        }
+      }
+
+      // 收集流式响应数据
+      let accumulatedContent = '';
+      let toolCalls = null;
+      
+      // 增强的流式回调，处理工具调用
+      const enhancedStreamCallback = (chunkData) => {
+        // 累积内容
+        if (chunkData.type === 'content' && chunkData.content) {
+          accumulatedContent += chunkData.content;
+        }
+        
+        // 更新工具调用
+        if (chunkData.type === 'tool_call_progress' && chunkData.toolCalls) {
+          toolCalls = chunkData.toolCalls;
+        }
+        
+        // 完成时检查工具调用
+        if (chunkData.type === 'complete' && chunkData.toolCalls) {
+          toolCalls = chunkData.toolCalls;
+        }
+        
+        // 转发给原始回调
+        if (streamCallback) {
+          streamCallback(chunkData);
+        }
+      };
 
       // 使用流式完成
-      const response = await this.aiClient.streamComplete(requestParams, streamCallback);
+      const response = await this.aiClient.streamComplete(requestParams, enhancedStreamCallback);
 
-      // 📝 记录完整的LLM响应
-      console.log('\n🌊 [STREAM_RESPONSE]:');
-      console.log('=' .repeat(80));
-      console.log(response.content);
-      console.log('=' .repeat(80));
-      console.log(''); // 空行分隔
+      // 处理工具调用
+      if (response.tool_calls && response.tool_calls.length > 0) {
+        console.log('🎯 [LLM_DECISION_STREAM] LLM decided to call tools:', response.tool_calls.map(tc => tc.function.name));
+        
+        // 构造消息对象用于工具调用处理
+        const message = {
+          content: response.content || '',
+          tool_calls: response.tool_calls
+        };
+        
+        // 通知前端流式结束，准备处理工具调用
+        if (streamCallback) {
+          streamCallback({
+            type: 'tool_calls_start',
+            content: '',
+            fullContent: accumulatedContent,
+            isComplete: false,
+            toolCalls: response.tool_calls
+          });
+        }
+        
+        // 处理工具调用并获取最终结果
+        const result = await this.handleToolCalls(message, userInput);
+        
+        // 通知前端工具调用完成
+        if (streamCallback) {
+          streamCallback({
+            type: 'tool_calls_complete',
+            isComplete: true
+          });
+        }
+        
+        return result;
+      } else {
+        // Log when LLM didn't call tools despite having them available
+        if (requestParams.tools && requestParams.tools.length > 0) {
+          console.log('⚠️ [LLM_DECISION_STREAM] LLM chose NOT to call any tools despite having', requestParams.tools.length, 'tools available');
+          console.log('⚠️ [LLM_DECISION_STREAM] Available tools were:', requestParams.tools.map(t => t.function.name));
+          console.log('⚠️ [LLM_DECISION_STREAM] User input was:', userInput);
+          console.log('⚠️ [LLM_DECISION_STREAM] LLM response preview:', response.content ? response.content.substring(0, 200) + '...' : 'NO CONTENT');
+        }
+      }
 
-      // 解析最终响应并更新状态
+      // 没有工具调用，解析普通响应
       const result = this.parseResponse(response.content, userInput);
 
       // 更新聊天历史
@@ -323,6 +608,30 @@ class CoreAgent {
 
   parseResponse(aiResponse, originalInput) {
     try {
+      // 检查是否使用了错误的格式 <<>>
+      if (aiResponse.includes('<<>>') && !aiResponse.includes('<<<SYSTEMOUTPUT>>>')) {
+        // 尝试修复格式
+        
+        // 先尝试匹配 <<>>\nJSON\n<<>> 格式
+        const newlineMatch = aiResponse.match(/<<>>\s*([\s\S]*?)\s*<<>>/);
+        if (newlineMatch) {
+          const jsonContent = newlineMatch[1].trim();
+          // 获取<<>>之前的内容作为可见消息
+          const beforeDelimiter = aiResponse.substring(0, aiResponse.indexOf('<<>>'));
+          // 重构为正确格式
+          aiResponse = beforeDelimiter.trim() + '\n<<<SYSTEMOUTPUT>>>\n' + jsonContent + '\n<<<SYSTEMOUTPUT>>>';
+        } else {
+          // 旧的分割方式作为后备
+          const parts = aiResponse.split('<<>>');
+          if (parts.length >= 3) {
+            // 假设格式是: 消息<<>>JSON<<>>
+            const jsonContent = parts[1].trim();
+            // 重构为正确格式
+            aiResponse = parts[0] + '\n<<<SYSTEMOUTPUT>>>\n' + jsonContent + '\n<<<SYSTEMOUTPUT>>>';
+            }
+        }
+      }
+      
       // 提取用户可见的消息部分
       let visibleMessage = this.extractVisibleMessage(aiResponse);
 
@@ -334,7 +643,6 @@ class CoreAgent {
         // 检查是否在消息中包含了SYSTEMOUTPUT
         const messageMatch = aiResponse.match(/<<<SYSTEMOUTPUT>>>([\s\S]*?)(?:<<<SYSTEMOUTPUT>>>|$)/);
         if (messageMatch) {
-          console.warn('⚠️ [PARSE] SYSTEMOUTPUT嵌入在消息中，尝试提取...');
           systemOutputMatch = messageMatch;
           // 重新提取可见消息，确保移除嵌入的SYSTEMOUTPUT
           visibleMessage = this.extractVisibleMessage(aiResponse);
@@ -342,7 +650,6 @@ class CoreAgent {
       }
 
       if (!systemOutputMatch) {
-        console.warn('⚠️ [PARSE] 未找到SYSTEMOUTPUT标记，返回基础响应');
         return {
           success: true,
           message: visibleMessage,
@@ -363,34 +670,7 @@ class CoreAgent {
           description: 'System output from LLM'
         });
       } catch (parseError) {
-        console.error('❌ [PARSE] JSON解析失败:', parseError);
-        console.error('❌ [PARSE] 解析错误详情:', parseError.message);
-        console.error('原始JSON长度:', rawJson.length);
-        console.error('原始JSON内容:');
-        console.error('=' .repeat(80));
-        console.error(rawJson);
-        console.error('=' .repeat(80));
-        console.error('清理后JSON长度:', cleanJson.length);
-        console.error('清理后JSON内容:');
-        console.error('=' .repeat(80));
-        console.error(cleanJson);
-        console.error('=' .repeat(80));
-        
-        // 尝试找出具体的错误位置
-        const errorMatch = parseError.message.match(/position (\d+)/);
-        if (errorMatch) {
-          const position = parseInt(errorMatch[1]);
-          console.error(`❌ [PARSE] 错误位置 ${position} 附近的内容:`);
-          const start = Math.max(0, position - 50);
-          const end = Math.min(cleanJson.length, position + 50);
-          console.error(cleanJson.substring(start, end));
-          console.error(' '.repeat(position - start) + '^--- 错误位置');
-        }
-        
-        // 显示JSON末尾的字符
-        if (cleanJson.length > 400) {
-          console.error('JSON末尾100字符:', cleanJson.slice(-100));
-        }
+        console.error('❌ JSON parsing failed:', parseError.message);
         
         return this.getErrorResponse(new Error('Invalid JSON in SYSTEMOUTPUT: ' + parseError.message));
       }
@@ -452,27 +732,48 @@ class CoreAgent {
   }
 
   updateChatHistory(userInput, aiResponse) {
-    const userMessage = {
-      role: 'user',
-      content: userInput,
-      timestamp: new Date().toISOString()
-    };
+    // 只有非空的用户输入才添加到历史
+    if (userInput && userInput.trim()) {
+      this.messageIdCounter++;
+      const userMessage = {
+        id: this.messageIdCounter,
+        role: 'user',
+        content: userInput,
+        timestamp: new Date().toISOString()
+      };
+      this.rawChatHistory.push(userMessage);
+    } else {
+    }
 
+    this.messageIdCounter++;
     const aiMessage = {
+      id: this.messageIdCounter,
       role: 'assistant',
       content: aiResponse,
       timestamp: new Date().toISOString()
     };
 
-    // 添加到原始历史（包含SYSTEMOUTPUT）
-    this.rawChatHistory.push(userMessage, aiMessage);
+    // 添加AI消息到原始历史（包含SYSTEMOUTPUT）
+    this.rawChatHistory.push(aiMessage);
 
     // 添加到可见历史（不包含SYSTEMOUTPUT）
     const visibleAiMessage = {
       ...aiMessage,
       content: this.extractVisibleMessage(aiResponse)
     };
-    this.visibleChatHistory.push(userMessage, visibleAiMessage);
+    
+    // 只有非空的用户输入才添加到可见历史
+    if (userInput && userInput.trim()) {
+      // 查找对应的用户消息以保持ID一致
+      const userMsg = this.rawChatHistory.find(msg => 
+        msg.role === 'user' && msg.content === userInput && msg.id
+      );
+      if (userMsg) {
+        this.visibleChatHistory.push(userMsg);
+      }
+    }
+    
+    this.visibleChatHistory.push(visibleAiMessage);
 
     // 限制历史记录长度
     const maxMessages = this.config.maxHistoryMessages;
@@ -481,6 +782,66 @@ class CoreAgent {
     }
     if (this.visibleChatHistory.length > maxMessages) {
       this.visibleChatHistory = this.visibleChatHistory.slice(-maxMessages);
+    }
+  }
+
+  // 添加MCP工具执行结果到聊天历史
+  addMCPResultsToHistory(mcpResults) {
+    if (!mcpResults || mcpResults.length === 0) return;
+
+    // 构建MCP结果的消息内容
+    let mcpContent = '';
+    
+    for (const result of mcpResults) {
+      // 跳过标记为 skipHistory 的结果
+      if (result.result && result.result.metadata && result.result.metadata.skipHistory) {
+        continue;
+      }
+      
+      if (result.success && result.result) {
+        // 处理文本内容
+        if (result.result.content && Array.isArray(result.result.content)) {
+          for (const contentItem of result.result.content) {
+            if (contentItem.type === 'text' && contentItem.text) {
+              mcpContent += contentItem.text + '\n\n';
+            }
+          }
+        }
+        // 处理SVG内容
+        else if (result.result.svg) {
+          mcpContent += result.result.svg + '\n\n';
+        }
+      }
+    }
+
+    if (mcpContent.trim()) {
+      // Use sequential ID for MCP message
+      this.messageIdCounter++;
+      const messageId = this.messageIdCounter;
+      
+      // 创建一个系统消息来保存MCP结果
+      const mcpMessage = {
+        id: messageId,
+        role: 'system',
+        content: `[MCP Tool Results]\n${mcpContent.trim()}`,
+        timestamp: new Date().toISOString(),
+        isMCPResult: true
+      };
+
+      // 只添加到原始历史记录中（不可见）
+      this.rawChatHistory.push(mcpMessage);
+
+      // Store the message ID in a way that LLM can reference it
+      this.lastMCPResultId = messageId;
+      
+      // 添加一个 user 消息，但标识为 MCP 子角色
+      const mcpInfoMessage = {
+        role: 'user',
+        content: `[MCP Context]\n${JSON.stringify({ last_mcp_result_id: messageId })}`,
+        timestamp: new Date().toISOString(),
+        isMCPContext: true
+      };
+      this.rawChatHistory.push(mcpInfoMessage);
     }
   }
 
@@ -496,20 +857,46 @@ class CoreAgent {
 
   extractVisibleMessage(aiResponse) {
     // 移除SYSTEMOUTPUT部分，只保留用户可见内容
-    // 支持两种格式：
+    // 支持多种格式：
     // 1. 标准格式：<<<SYSTEMOUTPUT>>>...<<<SYSTEMOUTPUT>>>
     // 2. 简化格式：<<<SYSTEMOUTPUT>>>...（到字符串结尾）
-    let visibleContent = aiResponse
-      .replace(/<<<SYSTEMOUTPUT>>>[\s\S]*?<<<SYSTEMOUTPUT>>>/g, '') // 标准格式
-      .replace(/<<<SYSTEMOUTPUT>>>[\s\S]*$/g, '') // 简化格式（到结尾）
-      .trim();
+    // 3. 错误格式：<<>>...<<>>
     
+    let visibleContent = aiResponse;
     
-    // 如果提取后的内容仍然包含SYSTEMOUTPUT，说明格式有问题
-    if (visibleContent.includes('<<<SYSTEMOUTPUT>>>')) {
-      console.warn('⚠️ [extractVisibleMessage] 提取后仍包含SYSTEMOUTPUT标记');
+    // 先检查是否使用了错误的<<>>格式
+    if (aiResponse.includes('<<>>') && !aiResponse.includes('<<<SYSTEMOUTPUT>>>')) {
+      // 处理<<>>格式
+      const delimiterMatch = aiResponse.match(/^([\s\S]*?)<<>>[\s\S]*?<<>>[\s\S]*$/);
+      if (delimiterMatch) {
+        visibleContent = delimiterMatch[1].trim();
+      } else if (aiResponse.trim().startsWith('<<>>')) {
+        // 如果以<<>>开始，说明没有可见内容
+        return '';
+      }
+    } else {
+      // 处理标准<<<SYSTEMOUTPUT>>>格式
+      const standardMatch = aiResponse.match(/^([\s\S]*?)<<<SYSTEMOUTPUT>>>[\s\S]*?<<<SYSTEMOUTPUT>>>[\s\S]*$/);
+      if (standardMatch) {
+        visibleContent = standardMatch[1].trim();
+      } else {
+        // 尝试简化格式（只有开始标记）
+        const simplifiedMatch = aiResponse.match(/^([\s\S]*?)<<<SYSTEMOUTPUT>>>[\s\S]*$/);
+        if (simplifiedMatch) {
+          visibleContent = simplifiedMatch[1].trim();
+        }
+      }
+      
+      // 如果完全没有用户可见内容（整个响应都是SYSTEMOUTPUT），返回空字符串
+      if (aiResponse.trim().startsWith('<<<SYSTEMOUTPUT>>>')) {
+        return '';
+      }
+    }
+    
+    // 如果提取后的内容仍然包含SYSTEMOUTPUT或<<>>，说明格式有问题
+    if (visibleContent.includes('<<<SYSTEMOUTPUT>>>') || visibleContent.includes('<<>>')) {
       // 再次尝试清理
-      visibleContent = visibleContent.split('<<<SYSTEMOUTPUT>>>')[0].trim();
+      visibleContent = visibleContent.split('<<<SYSTEMOUTPUT>>>')[0].split('<<>>')[0].trim();
     }
 
     // 修复可能的SVG转义问题
@@ -612,10 +999,40 @@ class CoreAgent {
 
   getCleanChatHistory() {
     // 返回用于LLM的干净历史记录
-    return this.rawChatHistory.map(msg => ({
-      role: msg.role,
-      content: msg.role === 'user' ? this.maskSensitiveInfo(msg.content) : msg.content
-    }));
+    return this.rawChatHistory.map(msg => {
+      const cleanMsg = {
+        role: msg.role,
+        content: msg.role === 'user' ? this.maskSensitiveInfo(msg.content) : msg.content
+      };
+      
+      // Include tool calls if present
+      if (msg.tool_calls) {
+        cleanMsg.tool_calls = msg.tool_calls;
+      }
+      
+      // Include tool call ID for tool responses
+      if (msg.tool_call_id) {
+        cleanMsg.tool_call_id = msg.tool_call_id;
+        cleanMsg.name = msg.name;
+        
+        // For tool responses, only include error messages in content
+        // This prevents raw JSON results like {"success":true} from appearing
+        try {
+          const parsed = JSON.parse(msg.content);
+          if (parsed.error) {
+            cleanMsg.content = `Tool error: ${parsed.error}`;
+          } else {
+            // For successful tool calls, provide a simple confirmation
+            cleanMsg.content = 'Tool executed successfully';
+          }
+        } catch (e) {
+          // If not JSON, keep original content
+          cleanMsg.content = msg.content;
+        }
+      }
+      
+      return cleanMsg;
+    });
   }
 
   async cleanup() {

@@ -1,14 +1,20 @@
 const OpenAI = require('openai');
+const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const logger = require('./logger');
+
+const OpenAIAdapter = require('./ai-adapters/openai-adapter');
+const AnthropicAdapter = require('./ai-adapters/anthropic-adapter');
+const GeminiAdapter = require('./ai-adapters/gemini-adapter');
 
 /**
  * AI客户端包装类
  * 提供统一的接口用于不同LLM服务
  */
 class AIClientWrapper {
-  constructor(client, model) {
-    this.client = client;
-    this.model = model;
+  constructor(adapter) {
+    this.adapter = adapter;
+    this.model = adapter.model;
 
     // 提供标准的 OpenAI 接口兼容性
     this.chat = {
@@ -16,16 +22,10 @@ class AIClientWrapper {
         create: async(params) => {
           console.log('🤖 [CLIENT] 开始调用 |', `模型: ${this.model} | 消息数: ${params.messages?.length} | 温度: ${params.temperature}`);
 
-          // 使用传入的参数，但确保使用包装器的模型
-          const requestParams = {
-            ...params,
-            model: this.model
-          };
-
           const startTime = Date.now();
 
           try {
-            const response = await this.client.chat.completions.create(requestParams);
+            const response = await this.adapter.createCompletion(params);
             const duration = Date.now() - startTime;
 
             console.log('🤖 [CLIENT] 调用成功 |', `耗时: ${duration}ms | 完成: ${response.choices?.[0]?.finish_reason} | 内容: ${response.choices?.[0]?.message?.content?.length}字`);
@@ -62,85 +62,39 @@ class AIClientWrapper {
     try {
       const startTs = Date.now();
 
-      const params = {
-        model: this.model,
-        messages: requestConfig.messages,
-        max_tokens: requestConfig.max_tokens,
-        temperature: requestConfig.temperature,
-        stream: true
-      };
-
-      // 🔧 支持response_format参数
-      if (requestConfig.response_format) {
-        params.response_format = requestConfig.response_format;
-      }
-
-      const stream = await this.client.chat.completions.create(params);
-
-      let fullContent = '';
-      let chunkCount = 0;
-      let firstTokenLatency = null;
-
-      for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta?.content || '';
-        if (delta) {
-          chunkCount++;
-          if (firstTokenLatency === null) {
-            firstTokenLatency = Date.now() - startTs;
-          }
-          fullContent += delta;
-          if (streamCallback) {
-            // 🔧 修复：传递包含content字段的对象，而不是原始字符串
-            streamCallback({
-              content: delta,
-              fullContent: fullContent,
-              isComplete: false,
-              type: 'content'
-            });
-          }
+      // 记录完整的 LLM 输入
+      const formattedMessages = requestConfig.messages.map((msg, index) => {
+        let content = msg.content;
+        // 截断 system 消息到200字符
+        if (msg.role === 'system' && content.length > 200) {
+          content = content.substring(0, 200) + '...[truncated]';
         }
-      }
+        return `\n[${index}] ${msg.role.toUpperCase()}:\n${content}`;
+      }).join('\n---');
 
-      // 🔧 发送最终完成信号
-      if (streamCallback) {
-        streamCallback({
-          content: '',
-          fullContent: fullContent,
-          isComplete: true,
-          type: 'complete'
-        });
-      }
+      logger.info('[LLM_INPUT] Full request to AI model\n' +
+        `Model: ${this.model}\n` +
+        `Temperature: ${requestConfig.temperature}\n` +
+        `Max Tokens: ${requestConfig.max_tokens}\n` +
+        `Messages (${requestConfig.messages.length}):\n` +
+        `---${formattedMessages}\n` +
+        `--- END OF MESSAGES ---`
+      );
+
+      const result = await this.adapter.createStreamingCompletion(requestConfig, streamCallback);
 
       const totalLatency = Date.now() - startTs;
       logger.info('[PERF] streamComplete', {
         model: this.model,
         totalLatency,
-        firstTokenLatency,
-        chunkCount,
-        contentLength: fullContent.length
+        firstTokenLatency: result.metrics?.firstTokenLatency,
+        chunkCount: result.metrics?.chunkCount,
+        contentLength: result.content.length
       });
 
-      // 📝 记录流式完成的原始响应内容及元数据
-      console.log('\n🌊 [STREAM_CLIENT_RAW_RESPONSE]:');
-      console.log('=' .repeat(80));
-      console.log(fullContent);
-      console.log('=' .repeat(80));
-      console.log('🌊 [STREAM_CLIENT_METADATA]:', {
-        model: this.model,
-        totalLatency,
-        firstTokenLatency,
-        chunkCount,
-        contentLength: fullContent.length,
-        finish_reason: 'stop'
-      });
       console.log(''); // 空行分隔
 
-      return {
-        content: fullContent,
-        role: 'assistant',
-        finish_reason: 'stop',
-        metrics: { totalLatency, firstTokenLatency, chunkCount }
-      };
+      return result;
 
     } catch (error) {
       logger.error(`Stream completion failed for model ${this.model}:`, error);
@@ -155,52 +109,40 @@ class AIClientWrapper {
     try {
       const startTs = Date.now();
 
-      const params = {
-        model: this.model,
-        messages: requestConfig.messages,
-        max_tokens: requestConfig.max_tokens,
-        temperature: requestConfig.temperature,
-        stream: false
-      };
+      // 记录完整的 LLM 输入（非流式）
+      const formattedMessages = requestConfig.messages.map((msg, index) => {
+        let content = msg.content;
+        // 截断 system 消息到200字符
+        if (msg.role === 'system' && content.length > 200) {
+          content = content.substring(0, 200) + '...[truncated]';
+        }
+        return `\n[${index}] ${msg.role.toUpperCase()}:\n${content}`;
+      }).join('\n---');
 
-      // 🔧 支持response_format参数
-      if (requestConfig.response_format) {
-        params.response_format = requestConfig.response_format;
-      }
+      logger.info('[LLM_INPUT_COMPLETE] Full request to AI model\n' +
+        `Model: ${this.model}\n` +
+        `Temperature: ${requestConfig.temperature}\n` +
+        `Max Tokens: ${requestConfig.max_tokens}\n` +
+        `Messages (${requestConfig.messages.length}):\n` +
+        `---${formattedMessages}\n` +
+        `--- END OF MESSAGES ---`
+      );
 
-      const response = await this.client.chat.completions.create(params);
+      const response = await this.adapter.createCompletion(requestConfig);
 
-      const totalLatency = Date.now() - startTs;
-      logger.info('[PERF] complete', {
-        model: this.model,
-        totalLatency,
-        contentLength: response.choices[0]?.message?.content?.length || 0
-      });
-
-      // 📝 记录非流式完成的原始响应内容及元数据
-      console.log('\n🤖 [COMPLETE_CLIENT_RAW_RESPONSE]:');
+      const duration = Date.now() - startTs;
+      
+      console.log('🤖 [CLIENT_COMPLETE] 调用成功 |', `耗时: ${duration}ms | 内容: ${response.choices?.[0]?.message?.content?.length}字`);
+      console.log('\n🤖 [CLIENT_COMPLETE_RAW_RESPONSE]:');
       console.log('=' .repeat(80));
-      console.log(response.choices[0]?.message?.content);
+      console.log(response.choices?.[0]?.message?.content);
       console.log('=' .repeat(80));
-      console.log('🤖 [COMPLETE_CLIENT_METADATA]:', {
-        model: this.model,
-        finish_reason: response.choices[0]?.finish_reason,
-        usage: response.usage,
-        created: response.created,
-        id: response.id,
-        totalLatency
-      });
       console.log(''); // 空行分隔
 
-      return {
-        content: response.choices[0]?.message?.content || '',
-        role: 'assistant',
-        finish_reason: response.choices[0]?.finish_reason || 'stop',
-        metrics: { totalLatency }
-      };
+      return response;
 
     } catch (error) {
-      logger.error(`Completion failed for model ${this.model}:`, error);
+      logger.error(`Non-stream completion failed for model ${this.model}:`, error);
       throw error;
     }
   }
@@ -225,66 +167,81 @@ class AIClientFactory {
     
     logger.info(`Creating AI client for model: ${model}`);
 
-    let baseClient;
+    let adapter;
 
-    // 根据模型类型创建不同的客户端
+    // 根据模型类型创建不同的适配器
     if (model.startsWith('gpt-') || model.startsWith('o1-')) {
       // OpenAI模型
-      baseClient = new OpenAI({
+      const client = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY
       });
+      adapter = new OpenAIAdapter(client, model);
     } else if (model.startsWith('gemini-')) {
-      // Google Gemini模型 - 使用OpenAI兼容接口
-      baseClient = new OpenAI({
-        apiKey: process.env.GOOGLE_API_KEY,
-        baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/'
-      });
+      // 检查是否使用 OpenAI 兼容模式
+      if (process.env.GEMINI_USE_OPENAI_COMPATIBLE === 'true') {
+        // Google Gemini模型 - 使用OpenAI兼容接口
+        const client = new OpenAI({
+          apiKey: process.env.GOOGLE_API_KEY,
+          baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/'
+        });
+        adapter = new OpenAIAdapter(client, model);
+      } else {
+        // 使用原生 Gemini API
+        const client = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+        adapter = new GeminiAdapter(client, model);
+      }
     } else if (model.startsWith('claude-')) {
-      // Anthropic Claude模型 - 使用OpenAI兼容接口
-      baseClient = new OpenAI({
-        apiKey: process.env.ANTHROPIC_API_KEY,
-        baseURL: 'https://api.anthropic.com/v1/openai/'
+      // Anthropic Claude模型
+      const client = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY
       });
+      adapter = new AnthropicAdapter(client, model);
     } else {
       // 默认使用OpenAI客户端
       logger.warn(`Unknown model type: ${model}, using OpenAI client as fallback`);
-      baseClient = new OpenAI({
+      const client = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY
       });
+      adapter = new OpenAIAdapter(client, model);
     }
 
-    // 返回包装器实例
-    return new AIClientWrapper(baseClient, model);
+    logger.info(`Created ${adapter.constructor.name} for model: ${model}`);
+    return new AIClientWrapper(adapter);
   }
 
   /**
-   * 批量创建多个AI客户端
-   * @param {Object} modelConfig - 模型配置对象 {agentName: modelName}
-   * @returns {Object} 客户端映射对象 {agentName: client}
+   * 获取支持的模型列表
+   * @returns {Array<{name: string, description: string}>}
    */
-  static createMultipleClients(modelConfig) {
-    const clients = {};
-
-    for (const [agentName, modelName] of Object.entries(modelConfig)) {
-      try {
-        clients[agentName] = this.createClient(modelName);
-        logger.info(`Created client for ${agentName} agent with model ${modelName}`);
-      } catch (error) {
-        logger.error(`Failed to create client for ${agentName}:`, error);
-        // 创建fallback客户端
-        clients[agentName] = this.createClient('gpt-4.1-mini');
-      }
-    }
-
-    return clients;
+  static getSupportedModels() {
+    return [
+      // OpenAI
+      { name: 'gpt-4-1106-preview', description: 'GPT-4 Turbo with 128K context' },
+      { name: 'gpt-4', description: 'GPT-4 with 8K context' },
+      { name: 'gpt-3.5-turbo', description: 'GPT-3.5 Turbo' },
+      { name: 'o1-preview', description: 'OpenAI o1 Preview' },
+      { name: 'o1-mini', description: 'OpenAI o1 Mini' },
+      
+      // Gemini
+      { name: 'gemini-1.5-pro', description: 'Google Gemini 1.5 Pro' },
+      { name: 'gemini-1.5-flash', description: 'Google Gemini 1.5 Flash' },
+      { name: 'gemini-1.0-pro', description: 'Google Gemini 1.0 Pro' },
+      
+      // Claude
+      { name: 'claude-3-opus-20240229', description: 'Claude 3 Opus' },
+      { name: 'claude-3-sonnet-20240229', description: 'Claude 3 Sonnet' },
+      { name: 'claude-3-haiku-20240307', description: 'Claude 3 Haiku' },
+      { name: 'claude-2.1', description: 'Claude 2.1' },
+      { name: 'claude-2.0', description: 'Claude 2.0' }
+    ];
   }
 
   /**
-   * 检查所需的API密钥是否配置
+   * 检查模型所需的环境变量是否配置
    * @param {string} model - 模型名称
-   * @returns {boolean} 是否配置了相应的API密钥
+   * @returns {boolean}
    */
-  static hasRequiredApiKey(model) {
+  static isModelConfigured(model) {
     if (model.startsWith('gpt-') || model.startsWith('o1-')) {
       return !!process.env.OPENAI_API_KEY;
     } else if (model.startsWith('gemini-')) {
@@ -296,27 +253,27 @@ class AIClientFactory {
   }
 
   /**
-   * 验证所有配置的模型是否有对应的API密钥
-   * @param {Object} modelConfig - 模型配置
-   * @returns {Object} 验证结果
+   * 获取模型的简短名称（用于日志等）
+   * @param {string} model - 模型名称
+   * @returns {string}
    */
-  static validateConfiguration(modelConfig) {
-    const results = {
-      valid: true,
-      missing: [],
-      configured: []
+  static getModelShortName(model) {
+    const modelMap = {
+      'gpt-4-1106-preview': 'GPT4-Turbo',
+      'gpt-4': 'GPT4',
+      'gpt-3.5-turbo': 'GPT3.5',
+      'o1-preview': 'O1-Preview',
+      'o1-mini': 'O1-Mini',
+      'gemini-1.5-pro': 'Gemini-Pro',
+      'gemini-1.5-flash': 'Gemini-Flash',
+      'gemini-1.0-pro': 'Gemini-1.0',
+      'claude-3-opus-20240229': 'Claude-Opus',
+      'claude-3-sonnet-20240229': 'Claude-Sonnet',
+      'claude-3-haiku-20240307': 'Claude-Haiku',
+      'claude-2.1': 'Claude-2.1',
+      'claude-2.0': 'Claude-2.0'
     };
-
-    for (const [agentName, modelName] of Object.entries(modelConfig)) {
-      if (this.hasRequiredApiKey(modelName)) {
-        results.configured.push({ agent: agentName, model: modelName });
-      } else {
-        results.valid = false;
-        results.missing.push({ agent: agentName, model: modelName });
-      }
-    }
-
-    return results;
+    return modelMap[model] || model;
   }
 }
 

@@ -11,9 +11,9 @@ module.exports = {
   window: {
     defaultWidth: 1200,
     defaultHeight: 800,
-    minimizeToTray: true,
+    minimizeToTray: false,
     icon: path.join(__dirname, 'assets/icon.png'),
-    trayIcon: path.join(__dirname, 'assets/tray-icon.png'),
+    // trayIcon: path.join(__dirname, 'assets/tray-icon.png'), // System tray disabled
     uiPath: path.join(__dirname, '../../framework/renderer/index.html')
   },
 
@@ -23,7 +23,7 @@ module.exports = {
     temperature: 0.7,
     maxTokens: 8192,
     maxHistoryMessages: 50,
-    promptFile: 'game-time-manager-prompt.md',
+    promptFile: 'game-time-manager-prompt-tools.md',
     // 游戏时间管理的初始变量
     initialVariables: {
       // 状态机

@@ -48,19 +48,37 @@ class MCPManager extends EventEmitter {
   }
 
   /**
+   * Set the AppManager reference for built-in tools
+   */
+  setAppManager(appManager) {
+    this.appManager = appManager;
+    this.logger.info('AppManager reference set in MCP Manager');
+  }
+
+  /**
    * Register built-in MCP tools
    */
   registerBuiltinTools() {
     try {
       const serverControlTools = require('./builtin-tools/server-control');
+      const memoryManagerTools = require('./builtin-tools/memory-manager');
+      const uiManagerTools = require('./builtin-tools/ui-manager');
       
-      for (const [toolName, toolDef] of Object.entries(serverControlTools)) {
+      // Combine all built-in tools
+      const allBuiltinTools = {
+        ...serverControlTools,
+        ...memoryManagerTools,
+        ...uiManagerTools
+      };
+      
+      for (const [toolName, toolDef] of Object.entries(allBuiltinTools)) {
         if (toolDef && toolDef.handler) {
           // Create a handler that passes the MCP Manager context
           const contextualHandler = async (params, role) => {
             const context = {
               mcpManager: this,
-              logger: this.logger
+              logger: this.logger,
+              appManager: this.appManager // Will be set by AppManager
             };
             return await toolDef.handler(params, context);
           };
@@ -418,7 +436,7 @@ class MCPManager extends EventEmitter {
     if (!this.mcpExecutor) {
       throw new Error('MCP Manager not initialized');
     }
-    return this.mcpExecutor.register(toolName, handler, pluginId);
+    return this.mcpExecutor.registerAction(toolName, handler, pluginId);
   }
 
   /**

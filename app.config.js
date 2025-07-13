@@ -4,7 +4,7 @@
 module.exports = {
   // 默认启动应用 (只需修改这个参数!)
   // 可选值: 'game-time-manager', 'chess-game'
-  defaultApp: 'chess-game',
+  defaultApp: 'game-time-manager',
   
   // 其他启动选项 (一般不需要修改)
   options: {

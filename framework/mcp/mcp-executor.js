@@ -271,17 +271,25 @@ class MCPExecutor extends EventEmitter {
   async connectMCPServer(serverConfig) {
     try {
       this.logger.info(`Connecting to external MCP server: ${serverConfig.name}`);
+      console.log('🔧 [MCPExecutor.connectMCPServer] Server config:', serverConfig);
       
       const client = new MCPClient(serverConfig, this.logger);
+      console.log('🔧 [MCPExecutor.connectMCPServer] MCPClient created');
       
       // Connect and discover capabilities
       await client.connect();
+      console.log('🔧 [MCPExecutor.connectMCPServer] Client connected successfully');
       
       // Register MCP tool proxy handlers
       const tools = client.getToolsForLLM();
+      console.log(`🔧 [MCPExecutor.connectMCPServer] Found ${tools.length} tools from server ${serverConfig.name}`);
+      
       for (const tool of tools) {
         const actionName = `mcp_${serverConfig.name}_${tool.name}`;
+        console.log(`🔧 [MCPExecutor.connectMCPServer] Registering tool: ${actionName}`);
+        
         const handler = async (params, role) => {
+          console.log(`🔧 [MCPExecutor] Executing MCP tool: ${actionName} with params:`, params);
           return await client.callTool(tool.name, params);
         };
         this.registerAction(actionName, handler, `mcp-server-${serverConfig.name}`);
@@ -289,6 +297,7 @@ class MCPExecutor extends EventEmitter {
       
       // Store client for management
       this.mcpClients.set(serverConfig.name, client);
+      console.log(`🔧 [MCPExecutor.connectMCPServer] Client stored in mcpClients map`);
       
       this.logger.info(`Successfully connected and registered ${tools.length} tools from MCP server: ${serverConfig.name}`);
       
@@ -296,6 +305,7 @@ class MCPExecutor extends EventEmitter {
       
     } catch (error) {
       this.logger.error(`Failed to connect to MCP server ${serverConfig.name}:`, error);
+      console.error('🔧 [MCPExecutor.connectMCPServer] Connection error:', error);
       throw error;
     }
   }
@@ -356,23 +366,44 @@ class MCPExecutor extends EventEmitter {
   getMCPToolsForPrompt() {
     const allTools = [];
     
+    console.log('🔧 [getMCPToolsForPrompt] Starting tool collection...');
+    console.log(`🔧 [getMCPToolsForPrompt] Registered actions count: ${this.registeredActions.size}`);
+    console.log(`🔧 [getMCPToolsForPrompt] MCP clients count: ${this.mcpClients.size}`);
+    
     // Add built-in tools
     for (const [actionName, actionInfo] of this.registeredActions) {
       if (actionInfo.pluginId === 'builtin') {
         // Try to load the tool definition to get metadata
-        try {
-          const serverControlTools = require('./builtin-tools/server-control');
-          const toolDef = serverControlTools[actionName];
-          if (toolDef) {
-            allTools.push({
-              name: actionName,
-              description: toolDef.description || 'Built-in MCP tool',
-              inputSchema: toolDef.inputSchema || {},
-              isBuiltin: true
-            });
+        let toolDef = null;
+        
+        // Check all built-in tool modules
+        const toolModules = [
+          './builtin-tools/server-control',
+          './builtin-tools/memory-manager',
+          './builtin-tools/ui-manager'
+        ];
+        
+        for (const modulePath of toolModules) {
+          try {
+            const tools = require(modulePath);
+            if (tools[actionName]) {
+              toolDef = tools[actionName];
+              break;
+            }
+          } catch (error) {
+            // Continue to next module
           }
-        } catch (error) {
-          // Fallback if we can't load the definition
+        }
+        
+        if (toolDef) {
+          allTools.push({
+            name: actionName,
+            description: toolDef.description || 'Built-in MCP tool',
+            inputSchema: toolDef.inputSchema || {},
+            isBuiltin: true
+          });
+        } else {
+          // Fallback if we can't find the definition
           allTools.push({
             name: actionName,
             description: 'Built-in MCP tool',
@@ -383,21 +414,62 @@ class MCPExecutor extends EventEmitter {
       }
     }
     
-    // Add external MCP server tools
-    for (const [serverName, client] of this.mcpClients) {
-      if (!client.connected || !client.initialized) continue;
+    console.log(`🔧 [getMCPToolsForPrompt] Built-in tools added: ${allTools.length}`);
+    
+    // Add tools from registered MCP servers (even if not connected yet)
+    if (this.mcpManager) {
+      const registeredConfigs = this.mcpManager.getRegisteredServerConfigs();
+      console.log(`🔧 [getMCPToolsForPrompt] Found ${registeredConfigs.length} registered MCP server configs`);
       
-      const tools = client.getToolsForLLM();
-      for (const tool of tools) {
-        allTools.push({
-          name: `mcp_${serverName}_${tool.name}`,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-          server: serverName,
-          originalName: tool.name
-        });
+      for (const serverConfig of registeredConfigs) {
+        const serverName = serverConfig.name;
+        
+        // Check if server is connected
+        if (this.mcpClients.has(serverName)) {
+          // Server is connected, get tools from the client
+          const client = this.mcpClients.get(serverName);
+          console.log(`🔧 [getMCPToolsForPrompt] Server ${serverName} is connected`);
+          
+          if (client.connected && client.initialized) {
+            const tools = client.getToolsForLLM();
+            console.log(`🔧 [getMCPToolsForPrompt] Found ${tools.length} tools from connected server ${serverName}`);
+            
+            for (const tool of tools) {
+              const toolName = `mcp_${serverName}_${tool.name}`;
+              allTools.push({
+                name: toolName,
+                description: tool.description,
+                inputSchema: tool.inputSchema,
+                server: serverName,
+                originalName: tool.name
+              });
+            }
+          }
+        } else if (serverConfig.tools && Array.isArray(serverConfig.tools)) {
+          // Server not connected, use predefined tools from config
+          console.log(`🔧 [getMCPToolsForPrompt] Server ${serverName} not connected, using ${serverConfig.tools.length} predefined tools`);
+          
+          for (const tool of serverConfig.tools) {
+            const toolName = `mcp_${serverName}_${tool.name}`;
+            console.log(`🔧 [getMCPToolsForPrompt] Adding predefined tool: ${toolName}`);
+            
+            allTools.push({
+              name: toolName,
+              description: tool.description || `Tool from ${serverName}`,
+              inputSchema: tool.inputSchema || { type: 'object', properties: {} },
+              server: serverName,
+              originalName: tool.name,
+              isPredefined: true
+            });
+          }
+        } else {
+          console.log(`🔧 [getMCPToolsForPrompt] Server ${serverName} not connected and no predefined tools`);
+        }
       }
     }
+    
+    console.log(`🔧 [getMCPToolsForPrompt] Total tools collected: ${allTools.length}`);
+    console.log('🔧 [getMCPToolsForPrompt] Tool names:', allTools.map(t => t.name));
     
     return allTools;
   }

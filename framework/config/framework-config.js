@@ -22,7 +22,7 @@ const FRAMEWORK_CONFIG = {
     defaultHeight: 800,
     minWidth: 800,
     minHeight: 600,
-    minimizeToTray: true,
+    minimizeToTray: false,
     icon: null,
     trayIcon: null,
     uiPath: null // Will be set based on environment

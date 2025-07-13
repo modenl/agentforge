@@ -216,3 +216,36 @@ input::placeholder, textarea::placeholder {
 .no-transition {
   transition: none !important;
 }
+
+/* LaTeX公式样式 */
+.latex-inline {
+  display: inline-block;
+  margin: 0 2px;
+  vertical-align: middle;
+}
+
+.latex-block {
+  display: block;
+  margin: 16px 0;
+  text-align: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* KaTeX容器样式优化 */
+.katex {
+  font-size: 1.1em;
+  color: var(--text);
+}
+
+.katex-display {
+  margin: 1em 0;
+}
+
+/* 防止公式过宽 */
+.message-content .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 0;
+}

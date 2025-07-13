@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { marked } from 'marked';
+  import { markedWithKatex as marked } from '../utils/marked-config.js';
   import AdaptiveCardPanel from './AdaptiveCardPanel.svelte';
 
   // Props including callback functions
@@ -21,6 +21,7 @@
   let chatContainer;
   let chatInputElement; // 添加输入框引用
   let electronAPI = null;
+  let messageIdCounter = 0; // 消息ID计数器
 
   // 初始化ChatWindow
   onMount(async() => {
@@ -41,6 +42,8 @@
       // 发送系统初始化消息
       await sendSystemInitialization();
 
+      // 设置IPC事件监听器
+      setupIPCListeners();
       
       // 初始化完成后聚焦输入框
       focusInput();
@@ -67,17 +70,125 @@
     }
   }
 
+  // 设置IPC事件监听器
+  function setupIPCListeners() {
+    if (!electronAPI) return;
+    
+    
+    // Listen for display:message events
+    electronAPI.on('display:message', (event, data) => {
+      
+      const { messageId, message } = data;
+      if (!messageId) {
+        return;
+      }
+      
+      // If message is provided, add it to visible chat
+      if (message) {
+        
+        // Assign a new sequential ID
+        messageIdCounter++;
+        const newMessage = {
+          id: messageIdCounter,
+          role: message.role,
+          content: message.content,
+          timestamp: message.timestamp || new Date().toISOString(),
+          metadata: message.metadata || messageId,
+          originalId: message.id || messageId,
+          isMCPResult: message.isMCPResult
+        };
+        
+        // Add to messages array
+        messages = [...messages, newMessage];
+        
+        // Scroll to the new message (array is 0-based, but we pass the index)
+        setTimeout(() => {
+          scrollToMessage(messages.length - 1);
+        }, 100);
+        
+        return;
+      }
+      
+      // Fallback: If messageId is a number, use it as direct index
+      const msgIdNum = parseInt(messageId);
+      if (!isNaN(msgIdNum) && msgIdNum > 0 && msgIdNum <= messages.length) {
+        // Message IDs are 1-based, array is 0-based
+        scrollToMessage(msgIdNum - 1);
+        return;
+      }
+      
+      // Otherwise, search by metadata/originalId for backward compatibility
+      const messageIndex = messages.findIndex(msg => 
+        msg.originalId === messageId || msg.metadata === messageId
+      );
+      
+      if (messageIndex !== -1) {
+        scrollToMessage(messageIndex);
+      }
+    });
+    
+    // Listen for display:assist-card events
+    electronAPI.on('display:assist-card', (event, data) => {
+      
+      const { card } = data;
+      if (!card) return;
+      
+      // Set the assist card
+      inputAssistCard = card;
+    });
+  }
+  
+  // Scroll to a specific message
+  function scrollToMessage(messageIndex) {
+    if (!chatContainer) {
+      return;
+    }
+    
+    // Use double requestAnimationFrame to ensure DOM is fully updated
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const messageElements = chatContainer.querySelectorAll('.message');
+        
+        if (messageElements[messageIndex]) {
+          // Force layout recalculation
+          chatContainer.scrollHeight; // This forces a reflow
+          
+          messageElements[messageIndex].scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+          
+          // Add highlight animation
+          messageElements[messageIndex].classList.add('highlight');
+          setTimeout(() => {
+            messageElements[messageIndex].classList.remove('highlight');
+          }, 2000);
+        }
+      });
+    });
+  }
+
   // 加载聊天历史
   async function loadChatHistory() {
     try {
       const history = await electronAPI.getVisibleHistory();
       if (history && Array.isArray(history)) {
-        messages = history.map(msg => ({
-          id: Date.now() + Math.random(),
-          role: msg.role,
-          content: msg.content,
-          timestamp: msg.timestamp || new Date().toISOString()
-        }));
+        // 重置消息数组
+        messages = [];
+        messageIdCounter = 0;
+        
+        // 为历史消息分配序号ID
+        history.forEach((msg, index) => {
+          messageIdCounter++;
+          messages.push({
+            id: messageIdCounter,
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp || new Date().toISOString(),
+            metadata: msg.metadata || null,  // Preserve metadata field for message lookup
+            originalId: msg.id  // 保留原始ID以便查找
+          });
+        });
       }
     } catch (error) {
       console.error('Failed to load chat history:', error);
@@ -126,10 +237,10 @@
 
 
   // 处理CoreAgent响应
-  function handleCoreAgentResponse(response) {
-
-    // 添加AI消息到聊天
-    if (response.message) {
+  function handleCoreAgentResponse(response, skipMessageAdd = false) {
+    
+    // 添加AI消息到聊天（除非是流式处理已经添加过）
+    if (!skipMessageAdd && response.message && response.message.trim()) {
       addMessage(response.message, 'assistant');
     }
 
@@ -140,24 +251,50 @@
         adaptiveCard: response.adaptive_card
       }
     });
+
+
+    // 检查MCP结果是否需要触发LLM
+    if (response.mcp_results && response.mcp_results.length > 0) {
+      // 只有非display工具的MCP结果才需要触发LLM
+      const needsLLMProcessing = response.mcp_results.some(result => 
+        result.action && !['display_message', 'display_assist_card'].includes(result.action)
+      );
+      
+      if (needsLLMProcessing) {
+        // 延迟触发，确保状态更新完成
+        setTimeout(() => {
+          if (!isProcessing) {
+            sendMessageToCoreAgent('');
+          }
+        }, 100);
+      }
+    }
   }
 
   // 添加消息到聊天历史
-  function addMessage(content, role) {
+  function addMessage(content, role, metadata = null) {
+    // 确保内容不为空
+    const messageContent = typeof content === 'string' ? content : String(content || '');
+    
+    
+    // 使用递增的消息ID
+    messageIdCounter++;
+    const messageId = messageIdCounter;
     
     const message = {
-      id: Date.now() + Math.random(),
+      id: messageId,
       role: role,
-      content: typeof content === 'string' ? content : String(content || ''),
-      timestamp: new Date().toISOString()
+      content: messageContent,
+      timestamp: new Date().toISOString(),
+      metadata: metadata
     };
-    
     
     messages = [...messages, message];
     
-    
     // 添加消息后滚动到底部
     scrollToBottom();
+    
+    // 用户消息会在 handleSubmit 中触发 LLM，这里不需要再触发
   }
 
   // 处理用户输入提交
@@ -174,14 +311,18 @@
 
   // 发送消息到CoreAgent
   async function sendMessageToCoreAgent(messageText) {
-    if (isProcessing) return;
+    if (isProcessing) {
+      return;
+    }
 
     isProcessing = true;
     let streamingMessage = null;
 
     try {
-      // 添加用户消息
-      addMessage(messageText, 'user');
+      // 添加用户消息（如果不是空消息）
+      if (messageText) {
+        addMessage(messageText, 'user');
+      }
 
       // 创建流式消息占位符
       streamingMessage = {
@@ -248,6 +389,48 @@
             // 流式显示时也要滚动
             scrollToBottom();
           }
+        } else if (chunkData.type === 'tool_calls_start') {
+          // 工具调用开始，不显示占位符，只标记状态
+          const msgIndex = messages.findIndex(msg => msg.id === streamingMessage.id);
+          if (msgIndex !== -1) {
+            // 如果还有缓冲区内容，先显示出来
+            if (contentBuffer.length > 0) {
+              displayedContent += contentBuffer;
+              contentBuffer = '';
+            }
+            
+            messages[msgIndex] = {
+              ...messages[msgIndex],
+              content: displayedContent,
+              isProcessingTools: true
+            };
+            messages = [...messages];
+          }
+        } else if (chunkData.type === 'tool_calls_complete') {
+          // 工具调用完成，不替换内容，只更新状态
+          const msgIndex = messages.findIndex(msg => msg.id === streamingMessage.id);
+          if (msgIndex !== -1) {
+            messages[msgIndex] = {
+              ...messages[msgIndex],
+              isProcessingTools: false
+            };
+            messages = [...messages];
+          }
+        } else if (chunkData.type === 'complete' && chunkData.isComplete) {
+          // 正常完成（无工具调用）
+          if (contentBuffer.length > 0) {
+            displayedContent += contentBuffer;
+            contentBuffer = '';
+            
+            const msgIndex = messages.findIndex(msg => msg.id === streamingMessage.id);
+            if (msgIndex !== -1) {
+              messages[msgIndex] = {
+                ...messages[msgIndex],
+                content: displayedContent
+              };
+              messages = [...messages];
+            }
+          }
         }
       });
 
@@ -263,36 +446,43 @@
         
         // 🔥 强制使用完整的response.message（包含MCP注入的SVG内容）
         // 即使流式显示被截断，最终消息必须是完整的
-        if (response.message) {
+        if (response.message && response.message.trim()) {
           streamingMessage.content = response.message;
-        } else {
-          if (displayedContent) {
-            streamingMessage.content = displayedContent;
-          }
+        } else if (displayedContent && displayedContent.trim()) {
+          streamingMessage.content = displayedContent;
         }
         
         // 找到流式消息的索引并更新它
         const streamingIndex = messages.findIndex(msg => msg.id === streamingMessage.id);
         if (streamingIndex !== -1) {
           // 创建一个新的消息对象来触发Svelte的响应式更新
-          messages[streamingIndex] = {
-            ...streamingMessage,
-            content: response.message || streamingMessage.content,
-            isStreaming: false
-          };
-          messages = [...messages];
+          const finalContent = (response.message && response.message.trim()) ? response.message : streamingMessage.content;
+          
+          // 如果最终内容为空，移除这个消息
+          if (!finalContent || !finalContent.trim()) {
+            messages = messages.filter(msg => msg.id !== streamingMessage.id);
+          } else {
+            messages[streamingIndex] = {
+              ...streamingMessage,
+              content: finalContent,
+              isStreaming: false
+            };
+            messages = [...messages];
+          }
         }
         
         // 流式完成时强制滚动到底部
         scrollToBottom();
         
-        // 处理其他响应数据（如Adaptive Cards），但不添加消息
-        onstateUpdate({
-          detail: {
-            newState: response.new_variables,
-            adaptiveCard: response.adaptive_card
-          }
-        });
+        // 先设置isProcessing为false，这样MCP消息触发的LLM调用才能正常工作
+        isProcessing = false;
+        
+        // 处理完整响应（包括检查MCP结果）- 跳过消息添加因为流式已经处理
+        handleCoreAgentResponse(response, true);
+        
+        // 消息处理完成后重新聚焦输入框
+        focusInput();
+        return; // 提前返回，避免再次设置isProcessing
       } else {
         // 移除流式消息并添加错误消息
         messages = messages.filter(msg => msg.id !== streamingMessage.id);
@@ -464,13 +654,15 @@
         return '🤖';
       case 'system':
         return '⚙️';
+      case 'mcp':
+        return '🔧';
       default:
         return '💬';
     }
   }
 
   // 获取角色标签
-  function getRoleLabel(role) {
+  function getRoleLabel(role, metadata) {
     switch (role) {
       case 'user':
         return '用户';
@@ -478,6 +670,8 @@
         return 'AI助手';
       case 'system':
         return '系统';
+      case 'mcp':
+        return metadata ? `MCP: ${metadata.split('_').pop()}` : 'MCP工具';
       default:
         return '未知';
     }
@@ -509,11 +703,18 @@
         <div class="message {message.role}">
           <div class="message-header">
             <span class="role-icon">{getRoleIcon(message.role)}</span>
-            <span class="role-label">{getRoleLabel(message.role)}</span>
+            <span class="role-label">{getRoleLabel(message.role, message.metadata)}</span>
             <span class="timestamp">{formatTimestamp(message.timestamp)}</span>
           </div>
           <div class="message-content">
-            {#if message.role === 'system'}
+            {#if message.role === 'system' && message.content && message.content.startsWith('[MCP Tool Results]')}
+              <!-- MCP结果需要渲染为Markdown -->
+              <div class="system-message">
+                <div class="markdown-content">
+                  {@html marked(message.content.replace('[MCP Tool Results]\n', ''))}
+                </div>
+              </div>
+            {:else if message.role === 'system'}
               <div class="system-message">{message.content}</div>
             {:else if message.content && message.content.includes('<svg')}
               <!-- 直接渲染包含SVG的HTML内容 -->
@@ -557,38 +758,40 @@
   </div>
 
   <!-- 输入区域 -->
-  <!-- 输入辅助卡片 -->
-  {#if inputAssistCard}
-    <div class="input-assist-section">
-      <AdaptiveCardPanel
-        cards={[inputAssistCard]}
-        compact={true}
-        oncardAction={handleInputAssistCardAction}
-      />
-    </div>
-  {/if}
-
-    <!-- 输入区域 -->
-    <div class="chat-input-section">
-      <div class="input-wrapper">
-        <input
-          type="text"
-          bind:value={chatInput}
-          onkeydown={handleKeydown}
-          placeholder="输入消息..."
-          disabled={isProcessing}
-          class="chat-input"
-          bind:this={chatInputElement}
-        />
-        <button
-          onclick={handleSubmit}
-          disabled={isProcessing || !chatInput.trim()}
-          class="send-btn"
-        >
-          {isProcessing ? '⏳' : '📤'}
+  <div class="chat-input-section">
+    <!-- 输入辅助卡片 -->
+    {#if inputAssistCard}
+      <div class="input-assist-wrapper">
+        <button class="assist-close-btn" onclick={() => inputAssistCard = null}>
+          ×
         </button>
+        <AdaptiveCardPanel
+          cards={[inputAssistCard]}
+          compact={true}
+          oncardAction={handleInputAssistCardAction}
+        />
       </div>
+    {/if}
+    
+    <div class="input-wrapper">
+      <input
+        type="text"
+        bind:value={chatInput}
+        onkeydown={handleKeydown}
+        placeholder="输入消息..."
+        disabled={isProcessing}
+        class="chat-input"
+        bind:this={chatInputElement}
+      />
+      <button
+        onclick={handleSubmit}
+        disabled={isProcessing || !chatInput.trim()}
+        class="send-btn"
+      >
+        {isProcessing ? '⏳' : '📤'}
+      </button>
     </div>
+  </div>
   </div>
 </div>
 
@@ -707,9 +910,40 @@
     border: 1px solid #ffeaa7;
   }
 
+  .message.mcp .message-content {
+    background: #e3f2fd;
+    border: 1px solid #90caf9;
+  }
+
   .system-message {
     font-style: italic;
     color: #856404;
+  }
+  
+  /* MCP结果中的markdown内容样式 */
+  .system-message .markdown-content {
+    font-style: normal;
+    color: #212121;
+  }
+  
+  /* MCP结果样式 */
+  :global(.system-message .markdown-content) {
+    color: #424242;
+    line-height: 1.6;
+  }
+  
+  :global(.system-message .markdown-content img) {
+    max-width: 100%;
+    height: auto;
+    margin: 10px 0;
+    border-radius: 4px;
+    display: block;
+  }
+  
+  /* 确保MCP消息可见 */
+  .message.system .message-content {
+    background: #f0f0f0;
+    border: 1px solid #e0e0e0;
   }
 
   .processing .message-content {
@@ -1012,5 +1246,66 @@
     font-weight: bold;
   }
 
+  /* Message highlight animation */
+  .message.highlight {
+    animation: messageHighlight 2s ease-out;
+  }
+  
+  @keyframes messageHighlight {
+    0% {
+      background-color: rgba(25, 118, 210, 0.2);
+      transform: scale(1.02);
+    }
+    50% {
+      background-color: rgba(25, 118, 210, 0.1);
+    }
+    100% {
+      background-color: transparent;
+      transform: scale(1);
+    }
+  }
+
+  /* Input assist card styles - docked above input */
+  .input-assist-wrapper {
+    position: relative;
+    margin-bottom: 12px;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .assist-close-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    transition: all 0.2s ease;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    color: #666;
+    transition: all 0.2s ease;
+  }
+
+  .assist-close-btn:hover {
+    background: #f5f5f5;
+    color: #333;
+  }
+
+  .assist-close-btn:active {
+    background: #e0e0e0;
+  }
 
 </style>

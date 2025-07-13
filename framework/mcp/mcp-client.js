@@ -81,23 +81,41 @@ class MCPClient extends EventEmitter {
     return new Promise((resolve, reject) => {
       const { command, args = [], env = {} } = this.serverConfig;
       
+      console.log('🚀 [MCPClient.startServerProcess] Starting MCP server:', {
+        name: this.serverConfig.name,
+        command,
+        args,
+        env,
+        cwd: process.cwd()
+      });
+      
       this.logger.debug(`Starting MCP server: ${command} ${args.join(' ')}`);
       
       this.serverProcess = spawn(command, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, ...env }
+        env: { ...process.env, ...env },
+        cwd: process.cwd() // Ensure proper working directory
       });
 
       this.serverProcess.on('error', (error) => {
+        console.error('❌ [MCPClient.startServerProcess] Server process error:', error);
         this.logger.error(`MCP server process error:`, error);
         reject(error);
       });
 
       this.serverProcess.on('exit', (code, signal) => {
+        console.warn('⚠️ [MCPClient.startServerProcess] Server process exited:', { code, signal });
         this.logger.warn(`MCP server process exited with code ${code}, signal ${signal}`);
         this.connected = false;
         this.initialized = false;
         this.emit('disconnected', { code, signal });
+      });
+
+      // Capture stderr for debugging
+      this.serverProcess.stderr.on('data', (data) => {
+        const errorMessage = data.toString();
+        console.error('🔴 [MCPClient.stderr]', this.serverConfig.name, ':', errorMessage);
+        this.logger.error(`MCP server stderr: ${errorMessage}`);
       });
 
       // Set up JSON-RPC communication
@@ -106,8 +124,10 @@ class MCPClient extends EventEmitter {
       // Wait for process to start
       setTimeout(() => {
         if (this.serverProcess && !this.serverProcess.killed) {
+          console.log('✅ [MCPClient.startServerProcess] Server process started successfully');
           resolve();
         } else {
+          console.error('❌ [MCPClient.startServerProcess] Server process failed to start');
           reject(new Error('Failed to start MCP server process'));
         }
       }, 1000);
@@ -330,14 +350,22 @@ class MCPClient extends EventEmitter {
    */
   async discoverTools() {
     try {
+      console.log('🔍 [MCPClient.discoverTools] Requesting tools list from:', this.serverConfig.name);
       const toolsResult = await this.sendRequest('tools/list');
+      console.log('📦 [MCPClient.discoverTools] Tools result:', toolsResult);
+      
       if (toolsResult && toolsResult.tools) {
+        console.log(`🛠️ [MCPClient.discoverTools] Found ${toolsResult.tools.length} tools`);
         for (const tool of toolsResult.tools) {
           this.tools.set(tool.name, tool);
+          console.log(`✅ [MCPClient.discoverTools] Registered tool: ${tool.name}`);
           this.logger.debug(`Discovered MCP tool: ${tool.name}`);
         }
+      } else {
+        console.warn('⚠️ [MCPClient.discoverTools] No tools found in response');
       }
     } catch (error) {
+      console.error('❌ [MCPClient.discoverTools] Failed to discover tools:', error);
       this.logger.warn('Failed to discover tools:', error.message);
     }
   }

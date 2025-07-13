@@ -56,6 +56,9 @@ class UniversalLauncher {
     const mcpConfig = this.loadMCPConfig();
     if (mcpConfig && mcpConfig.mcpServers) {
       config.mcpServers = mcpConfig.mcpServers;
+      console.log('📋 [LAUNCHER] MCP servers loaded from mcp.json:', Object.keys(mcpConfig.mcpServers));
+    } else {
+      console.log('⚠️ [LAUNCHER] No MCP servers found in mcp.json');
     }
 
     return config;
@@ -101,6 +104,7 @@ class UniversalLauncher {
       if (fs.existsSync(promptPath)) {
         const content = fs.readFileSync(promptPath, 'utf8');
         if (configuredPromptFile && fileName === configuredPromptFile) {
+          console.log(`📄 [PROMPT_LOADED] Successfully loaded business prompt from: ${promptPath}`);
         }
         return content;
       }
@@ -219,11 +223,13 @@ class UniversalLauncher {
 
       // Add the plugin to config
       finalConfig.plugins = [AppPluginClass];
+      console.log(`🔌 [LAUNCHER] Added plugin to config. finalConfig.plugins.length = ${finalConfig.plugins.length}`);
 
       // Validate configuration
       validateConfig(finalConfig);
       // Create and initialize the application manager
       this.appManager = new AppManager(finalConfig);
+      console.log(`🔌 [LAUNCHER] Created AppManager with config containing ${finalConfig.plugins.length} plugins`);
 
       await this.appManager.initialize();
 

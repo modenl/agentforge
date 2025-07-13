@@ -1,3 +1,31 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "amc8-quiz-mcp": {
+      "command": "node",
+      "args": ["--experimental-modules", "apps/game-time-manager/mcp-tools/amc8-quiz-mcp/index.js"],
+      "env": {},
+      "tools": [
+        {
+          "name": "get_problem",
+          "description": "获取指定年份和题号的AMC8题目"
+        },
+        {
+          "name": "random_problem",
+          "description": "随机选择一道AMC8题目"
+        },
+        {
+          "name": "get_problem_set",
+          "description": "获取某年的完整题目集（25道题）"
+        },
+        {
+          "name": "random_problem_set",
+          "description": "随机选择一年的完整题目集"
+        },
+        {
+          "name": "list_years",
+          "description": "列出所有可用的AMC8年份"
+        }
+      ]
+    }
+  }
 } 
